@@ -20,6 +20,15 @@ The code is organized into:
 - `GET /menu`
 - `GET /menu/{item_id}`
 - `POST /login`
+- `GET /members/{member_id}`
+- `GET /members/{member_id}/orders`
+- `GET /members/{member_id}/points`
+- `GET /search`
+- `GET /stats/orders`
+- `GET /stats/top-items`
+- `GET /stats/top-locations`
+- `GET /locations/{location_id}/orders`
+- `GET /locations/{location_id}/stats`
 - `GET /healthz`
 - `GET /readyz`
 - `GET /docs`
@@ -33,7 +42,14 @@ Use this endpoint when the frontend needs to:
 - show all coffee shop locations
 - filter locations by `state`
 - filter locations by `city`
+- filter locations by `open_for_business`, `wifi`, `drive_thru`, and `door_dash`
 - paginate through results with `limit` and `offset`
+
+Response fields also include:
+
+- `full_address` (computed)
+- `hours_today` (computed)
+- `open_now` (computed)
 
 Example:
 
@@ -64,7 +80,24 @@ Use this endpoint when the frontend needs to:
 
 - show the full menu
 - filter menu items by `category`
+- filter menu items by `min_price` and `max_price`
 - paginate menu items with `limit` and `offset`
+
+Response fields also include:
+
+- `price_display` (computed)
+
+### Sorting
+
+Menu supports:
+
+- `sort_by`: `name`, `price`, `calories`, `category`
+- `sort_dir`: `asc` or `desc`
+
+Orders support:
+
+- `sort_by`: `order_date`, `order_total`, `order_id`
+- `sort_dir`: `asc` or `desc`
 
 Example:
 
@@ -105,6 +138,101 @@ curl -X POST "http://127.0.0.1:8000/login" \
   -d '{"email":"member@example.com","password":"Coffee123!"}'
 ```
 
+### `GET /members/{member_id}`
+
+Returns a Coffee Club member profile from `mgmt545proj.uncle_joes.members`.
+
+Example:
+
+```bash
+curl "http://127.0.0.1:8000/members/member-1"
+```
+
+### `GET /members/{member_id}/orders`
+
+Returns a member’s order history from `mgmt545proj.uncle_joes.orders`.
+
+Optional query parameters:
+
+- `limit`, `offset`
+- `include_items=true` to include `order_items`
+
+Example:
+
+```bash
+curl "http://127.0.0.1:8000/members/member-1/orders?limit=25&offset=0&include_items=true"
+```
+
+### `GET /members/{member_id}/points`
+
+Returns the member’s loyalty points, calculated as the sum of `floor(order_total)` for all orders.
+
+Example:
+
+```bash
+curl "http://127.0.0.1:8000/members/member-1/points"
+```
+
+### `GET /search`
+
+Searches both locations and menu items with a single query string.
+
+Optional query parameters:
+
+- `scope=all|locations|menu`
+
+Example:
+
+```bash
+curl "http://127.0.0.1:8000/search?query=latte&limit=10"
+```
+
+### `GET /locations/{location_id}/orders`
+
+Returns orders for a specific location.
+
+Optional query parameters:
+
+- `limit`, `offset`
+- `include_items=true`
+- `sort_by`, `sort_dir`
+
+```bash
+curl "http://127.0.0.1:8000/locations/101/orders?limit=25&offset=0&include_items=true"
+```
+
+### `GET /locations/{location_id}/stats`
+
+Returns order stats for a specific location.
+
+```bash
+curl "http://127.0.0.1:8000/locations/101/stats"
+```
+
+### `GET /stats/orders`
+
+Returns overall order stats (total orders, total revenue, average order total).
+
+```bash
+curl "http://127.0.0.1:8000/stats/orders"
+```
+
+### `GET /stats/top-items`
+
+Returns top-selling menu items by quantity.
+
+```bash
+curl "http://127.0.0.1:8000/stats/top-items?limit=10"
+```
+
+### `GET /stats/top-locations`
+
+Returns top-performing locations by number of orders.
+
+```bash
+curl "http://127.0.0.1:8000/stats/top-locations?limit=10"
+```
+
 ### `GET /healthz`
 
 Simple liveness check.
@@ -140,6 +268,8 @@ Recommended environment variables:
 - `BQ_LOCATIONS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.locations`
 - `BQ_MENU_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.menu_items`
 - `BQ_MEMBERS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.members`
+- `BQ_ORDERS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.orders`
+- `BQ_ORDER_ITEMS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.order_items`
 - `CORS_ALLOW_ORIGINS` comma-separated list of allowed origins
 
 Optional column-mapping environment variables are supported when your BigQuery schema differs from the defaults. The defaults assume:
@@ -166,6 +296,8 @@ export BQ_DATASET="uncle_joes"
 export BQ_LOCATIONS_TABLE="mgmt545proj.uncle_joes.locations"
 export BQ_MENU_TABLE="mgmt545proj.uncle_joes.menu_items"
 export BQ_MEMBERS_TABLE="mgmt545proj.uncle_joes.members"
+export BQ_ORDERS_TABLE="mgmt545proj.uncle_joes.orders"
+export BQ_ORDER_ITEMS_TABLE="mgmt545proj.uncle_joes.order_items"
 export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
@@ -204,6 +336,8 @@ export BQ_DATASET="uncle_joes"
 export BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations"
 export BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items"
 export BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members"
+export BQ_ORDERS_TABLE="your-gcp-project.uncle_joes.orders"
+export BQ_ORDER_ITEMS_TABLE="your-gcp-project.uncle_joes.order_items"
 export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
@@ -276,6 +410,8 @@ docker run --rm -p 8080:8080 \
   -e BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations" \
   -e BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items" \
   -e BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members" \
+  -e BQ_ORDERS_TABLE="your-gcp-project.uncle_joes.orders" \
+  -e BQ_ORDER_ITEMS_TABLE="your-gcp-project.uncle_joes.order_items" \
   uncle-joes-api
 ```
 
@@ -286,7 +422,7 @@ gcloud run deploy uncle-joes-api \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars BQ_PROJECT_ID=mgmt545proj,BQ_LOCATIONS_TABLE=mgmt545proj.uncle_joes.locations,BQ_MENU_TABLE=mgmt545proj.uncle_joes.menu_items,BQ_MEMBERS_TABLE=mgmt545proj.uncle_joes.members,CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
+  --set-env-vars BQ_PROJECT_ID=mgmt545proj,BQ_LOCATIONS_TABLE=mgmt545proj.uncle_joes.locations,BQ_MENU_TABLE=mgmt545proj.uncle_joes.menu_items,BQ_MEMBERS_TABLE=mgmt545proj.uncle_joes.members,BQ_ORDERS_TABLE=mgmt545proj.uncle_joes.orders,BQ_ORDER_ITEMS_TABLE=mgmt545proj.uncle_joes.order_items,CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
 ```
 
 If your service account does not already have access, grant BigQuery read permissions to the Cloud Run runtime identity before deploying.

@@ -19,11 +19,23 @@ router = APIRouter(prefix="/menu", tags=["menu"])
 )
 def list_menu_items(
     category: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+    min_price: Annotated[float | None, Query(ge=0)] = None,
+    max_price: Annotated[float | None, Query(ge=0)] = None,
+    sort_by: Annotated[str | None, Query()] = None,
+    sort_dir: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
     service: MenuService = Depends(get_menu_service),
 ) -> list[MenuItem]:
-    params = MenuQueryParams(category=category, limit=limit, offset=offset)
+    params = MenuQueryParams(
+        category=category,
+        min_price=min_price,
+        max_price=max_price,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+    )
     return service.list_menu_items(params)
 
 

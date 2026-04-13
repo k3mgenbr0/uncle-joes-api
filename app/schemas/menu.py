@@ -10,9 +10,14 @@ class MenuItem(BaseModel):
     size: str | None = None
     calories: int | None = None
     price: float
+    price_display: str | None = None
 
 
 class MenuQueryParams(BaseModel):
     category: str | None = Field(default=None)
+    min_price: float | None = Field(default=None, ge=0)
+    max_price: float | None = Field(default=None, ge=0)
     limit: int = Field(default=500, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
+    sort_by: str | None = None
+    sort_dir: str = "asc"

@@ -87,6 +87,34 @@ class LocationRepository:
                 bigquery.ScalarQueryParameter("city", "STRING", params.city)
             )
 
+        if params.open_for_business is not None:
+            where_clauses.append(f"{self._open_for_business_column} = @open_for_business")
+            query_params.append(
+                bigquery.ScalarQueryParameter(
+                    "open_for_business",
+                    "BOOL",
+                    params.open_for_business,
+                )
+            )
+
+        if params.wifi is not None:
+            where_clauses.append(f"{self._wifi_column} = @wifi")
+            query_params.append(
+                bigquery.ScalarQueryParameter("wifi", "BOOL", params.wifi)
+            )
+
+        if params.drive_thru is not None:
+            where_clauses.append(f"{self._drive_thru_column} = @drive_thru")
+            query_params.append(
+                bigquery.ScalarQueryParameter("drive_thru", "BOOL", params.drive_thru)
+            )
+
+        if params.door_dash is not None:
+            where_clauses.append(f"{self._door_dash_column} = @door_dash")
+            query_params.append(
+                bigquery.ScalarQueryParameter("door_dash", "BOOL", params.door_dash)
+            )
+
         query_params.extend(
             [
                 bigquery.ScalarQueryParameter("limit", "INT64", params.limit),

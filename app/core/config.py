@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     bq_locations_table: str | None = Field(default=None, alias="BQ_LOCATIONS_TABLE")
     bq_menu_table: str | None = Field(default=None, alias="BQ_MENU_TABLE")
     bq_members_table: str | None = Field(default=None, alias="BQ_MEMBERS_TABLE")
+    bq_orders_table: str | None = Field(default=None, alias="BQ_ORDERS_TABLE")
+    bq_order_items_table: str | None = Field(
+        default=None,
+        alias="BQ_ORDER_ITEMS_TABLE",
+    )
 
     location_id_column: str = Field(default="id", alias="LOCATION_ID_COLUMN")
     location_city_column: str = Field(default="city", alias="LOCATION_CITY_COLUMN")
@@ -145,9 +150,59 @@ class Settings(BaseSettings):
         alias="MEMBER_LAST_NAME_COLUMN",
     )
     member_email_column: str = Field(default="email", alias="MEMBER_EMAIL_COLUMN")
+    member_phone_column: str = Field(default="phone_number", alias="MEMBER_PHONE_COLUMN")
+    member_home_store_column: str = Field(default="home_store", alias="MEMBER_HOME_STORE_COLUMN")
     member_password_column: str = Field(
         default="password",
         alias="MEMBER_PASSWORD_COLUMN",
+    )
+
+    order_id_column: str = Field(default="order_id", alias="ORDER_ID_COLUMN")
+    order_member_id_column: str = Field(default="member_id", alias="ORDER_MEMBER_ID_COLUMN")
+    order_store_id_column: str = Field(default="store_id", alias="ORDER_STORE_ID_COLUMN")
+    order_date_column: str = Field(default="order_date", alias="ORDER_DATE_COLUMN")
+    order_items_subtotal_column: str = Field(
+        default="items_subtotal",
+        alias="ORDER_ITEMS_SUBTOTAL_COLUMN",
+    )
+    order_discount_column: str = Field(
+        default="order_discount",
+        alias="ORDER_DISCOUNT_COLUMN",
+    )
+    order_subtotal_column: str = Field(
+        default="order_subtotal",
+        alias="ORDER_SUBTOTAL_COLUMN",
+    )
+    order_sales_tax_column: str = Field(
+        default="sales_tax",
+        alias="ORDER_SALES_TAX_COLUMN",
+    )
+    order_total_column: str = Field(default="order_total", alias="ORDER_TOTAL_COLUMN")
+
+    order_item_id_column: str = Field(default="id", alias="ORDER_ITEM_ID_COLUMN")
+    order_item_order_id_column: str = Field(
+        default="order_id",
+        alias="ORDER_ITEM_ORDER_ID_COLUMN",
+    )
+    order_item_menu_item_id_column: str = Field(
+        default="menu_item_id",
+        alias="ORDER_ITEM_MENU_ITEM_ID_COLUMN",
+    )
+    order_item_name_column: str = Field(
+        default="item_name",
+        alias="ORDER_ITEM_NAME_COLUMN",
+    )
+    order_item_size_column: str = Field(
+        default="size",
+        alias="ORDER_ITEM_SIZE_COLUMN",
+    )
+    order_item_quantity_column: str = Field(
+        default="quantity",
+        alias="ORDER_ITEM_QUANTITY_COLUMN",
+    )
+    order_item_price_column: str = Field(
+        default="price",
+        alias="ORDER_ITEM_PRICE_COLUMN",
     )
 
     @field_validator("cors_allow_origins", mode="before")
@@ -183,6 +238,18 @@ class Settings(BaseSettings):
     def resolved_members_table(self) -> str:
         return self.bq_members_table or (
             f"{self.bigquery_project_id}.{self.bq_dataset}.members"
+        )
+
+    @property
+    def resolved_orders_table(self) -> str:
+        return self.bq_orders_table or (
+            f"{self.bigquery_project_id}.{self.bq_dataset}.orders"
+        )
+
+    @property
+    def resolved_order_items_table(self) -> str:
+        return self.bq_order_items_table or (
+            f"{self.bigquery_project_id}.{self.bq_dataset}.order_items"
         )
 
 

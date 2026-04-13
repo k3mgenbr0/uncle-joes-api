@@ -1,0 +1,38 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class OrderItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    order_item_id: str
+    order_id: str
+    menu_item_id: str | None = None
+    item_name: str | None = None
+    size: str | None = None
+    quantity: int | None = None
+    price: float | None = None
+
+
+class Order(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    order_id: str
+    member_id: str | None = None
+    store_id: str | None = None
+    order_date: datetime | None = None
+    items_subtotal: float | None = None
+    order_discount: float | None = None
+    order_subtotal: float | None = None
+    sales_tax: float | None = None
+    order_total: float | None = None
+    items: list[OrderItem] = Field(default_factory=list)
+
+
+class OrderQueryParams(BaseModel):
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+    include_items: bool = False
+    sort_by: str | None = None
+    sort_dir: str = "desc"

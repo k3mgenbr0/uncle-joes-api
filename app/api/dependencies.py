@@ -8,9 +8,16 @@ from app.db.bigquery import BigQueryRunner
 from app.repositories.locations import LocationRepository
 from app.repositories.members import MemberRepository
 from app.repositories.menu import MenuRepository
+from app.repositories.orders import OrderRepository
+from app.repositories.search import SearchRepository
+from app.repositories.stats import StatsRepository
 from app.services.auth import AuthService
 from app.services.locations import LocationService
+from app.services.members import MemberService
 from app.services.menu import MenuService
+from app.services.orders import OrderService
+from app.services.search import SearchService
+from app.services.stats import StatsService
 
 
 def get_bigquery_client(
@@ -50,6 +57,27 @@ def get_member_repository(
     return MemberRepository(runner=runner, settings=settings)
 
 
+def get_order_repository(
+    runner: BigQueryRunner = Depends(get_bigquery_runner),
+    settings: Settings = Depends(get_settings),
+) -> OrderRepository:
+    return OrderRepository(runner=runner, settings=settings)
+
+
+def get_search_repository(
+    runner: BigQueryRunner = Depends(get_bigquery_runner),
+    settings: Settings = Depends(get_settings),
+) -> SearchRepository:
+    return SearchRepository(runner=runner, settings=settings)
+
+
+def get_stats_repository(
+    runner: BigQueryRunner = Depends(get_bigquery_runner),
+    settings: Settings = Depends(get_settings),
+) -> StatsRepository:
+    return StatsRepository(runner=runner, settings=settings)
+
+
 def get_location_service(
     repository: LocationRepository = Depends(get_location_repository),
 ) -> LocationService:
@@ -62,7 +90,31 @@ def get_menu_service(
     return MenuService(repository)
 
 
+def get_member_service(
+    repository: MemberRepository = Depends(get_member_repository),
+) -> MemberService:
+    return MemberService(repository)
+
+
+def get_order_service(
+    repository: OrderRepository = Depends(get_order_repository),
+) -> OrderService:
+    return OrderService(repository)
+
+
 def get_auth_service(
     repository: MemberRepository = Depends(get_member_repository),
 ) -> AuthService:
     return AuthService(repository)
+
+
+def get_search_service(
+    repository: SearchRepository = Depends(get_search_repository),
+) -> SearchService:
+    return SearchService(repository)
+
+
+def get_stats_service(
+    repository: StatsRepository = Depends(get_stats_repository),
+) -> StatsService:
+    return StatsService(repository)

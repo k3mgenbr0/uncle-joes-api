@@ -28,6 +28,22 @@ class MenuRepository:
                 bigquery.ScalarQueryParameter("category", "STRING", params.category)
             )
 
+        if params.min_price is not None:
+            where_clauses.append(
+                f"SAFE_CAST({self._price_column} AS FLOAT64) >= @min_price"
+            )
+            query_params.append(
+                bigquery.ScalarQueryParameter("min_price", "FLOAT64", params.min_price)
+            )
+
+        if params.max_price is not None:
+            where_clauses.append(
+                f"SAFE_CAST({self._price_column} AS FLOAT64) <= @max_price"
+            )
+            query_params.append(
+                bigquery.ScalarQueryParameter("max_price", "FLOAT64", params.max_price)
+            )
+
         query_params.extend(
             [
                 bigquery.ScalarQueryParameter("limit", "INT64", params.limit),
@@ -36,6 +52,7 @@ class MenuRepository:
         )
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        order_by = self._resolve_sort(params.sort_by, params.sort_dir)
         query = f"""
             SELECT
                 CAST({self._id_column} AS STRING) AS item_id,
@@ -46,7 +63,7 @@ class MenuRepository:
                 COALESCE(SAFE_CAST({self._price_column} AS FLOAT64), 0.0) AS price
             FROM {self._table}
             {where_sql}
-            ORDER BY {self._category_column}, {self._name_column}
+            ORDER BY {order_by}
             LIMIT @limit OFFSET @offset
         """
         return self._runner.fetch_all(query, query_params)
@@ -66,3 +83,14 @@ class MenuRepository:
         """
         params = [bigquery.ScalarQueryParameter("item_id", "STRING", item_id)]
         return self._runner.fetch_one(query, params)
+
+    def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
+        sort_map = {
+            "name": self._name_column,
+            "category": self._category_column,
+            "price": f"SAFE_CAST({self._price_column} AS FLOAT64)",
+            "calories": f"SAFE_CAST({self._calories_column} AS INT64)",
+        }
+        column = sort_map.get((sort_by or "name").lower(), self._name_column)
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        return f"{column} {direction}, {self._name_column} ASC"

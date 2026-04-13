@@ -12,6 +12,8 @@ class MemberRepository:
         self._first_name_column = quote_column(settings.member_first_name_column)
         self._last_name_column = quote_column(settings.member_last_name_column)
         self._email_column = quote_column(settings.member_email_column)
+        self._phone_column = quote_column(settings.member_phone_column)
+        self._home_store_column = quote_column(settings.member_home_store_column)
         self._password_column = quote_column(settings.member_password_column)
 
     def get_member_by_email(self, email: str) -> dict | None:
@@ -27,4 +29,20 @@ class MemberRepository:
             LIMIT 1
         """
         params = [bigquery.ScalarQueryParameter("email", "STRING", email)]
+        return self._runner.fetch_one(query, params)
+
+    def get_member_by_id(self, member_id: str) -> dict | None:
+        query = f"""
+            SELECT
+                CAST({self._id_column} AS STRING) AS member_id,
+                CAST({self._first_name_column} AS STRING) AS first_name,
+                CAST({self._last_name_column} AS STRING) AS last_name,
+                CAST({self._email_column} AS STRING) AS email,
+                CAST({self._phone_column} AS STRING) AS phone_number,
+                CAST({self._home_store_column} AS STRING) AS home_store
+            FROM {self._table}
+            WHERE CAST({self._id_column} AS STRING) = @member_id
+            LIMIT 1
+        """
+        params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
         return self._runner.fetch_one(query, params)

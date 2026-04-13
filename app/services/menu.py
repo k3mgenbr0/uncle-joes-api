@@ -21,11 +21,16 @@ class MenuService:
             params.offset,
             len(rows),
         )
-        return [MenuItem.model_validate(row) for row in rows]
+        return [self._enrich(MenuItem.model_validate(row)) for row in rows]
 
     def get_menu_item(self, item_id: str) -> MenuItem:
         row = self._repository.get_menu_item(item_id)
         if row is None:
             raise NotFoundError(f"Menu item '{item_id}' was not found.")
         logger.info("Fetched menu item item_id=%s", item_id)
-        return MenuItem.model_validate(row)
+        return self._enrich(MenuItem.model_validate(row))
+
+    @staticmethod
+    def _enrich(item: MenuItem) -> MenuItem:
+        item.price_display = f"${item.price:,.2f}"
+        return item

@@ -37,10 +37,17 @@ class Location(BaseModel):
     drive_thru: bool | None = None
     door_dash: bool | None = None
     hours: LocationHours = Field(default_factory=LocationHours)
+    full_address: str | None = None
+    hours_today: LocationHoursDay | None = None
+    open_now: bool | None = None
 
 
 class LocationQueryParams(BaseModel):
     state: str | None = Field(default=None)
     city: str | None = Field(default=None)
+    open_for_business: bool | None = None
+    wifi: bool | None = None
+    drive_thru: bool | None = None
+    door_dash: bool | None = None
     limit: int = Field(default=500, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
