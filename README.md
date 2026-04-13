@@ -178,7 +178,7 @@ gcloud auth application-default login
 4. Start the API:
 
 ```bash
-poetry run uvicorn app.main:app --reload
+poetry run uvicorn main:app --reload
 ```
 
 ### Option 2: Virtualenv + pip
@@ -229,6 +229,12 @@ gcloud auth application-default login
 
 ```bash
 uvicorn app.main:app --reload
+```
+
+You can also use the starter-style command:
+
+```bash
+python -m uvicorn main:app --reload
 ```
 
 6. Open the API docs in the browser:

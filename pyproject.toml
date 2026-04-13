@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Production-ready FastAPI backend for Uncle Joe's Coffee Shop."
 authors = []
 readme = "README.md"
-packages = [{ include = "app" }]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
