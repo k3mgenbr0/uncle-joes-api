@@ -6,7 +6,9 @@ from google.cloud import bigquery
 from app.core.config import Settings, get_settings
 from app.db.bigquery import BigQueryRunner
 from app.repositories.locations import LocationRepository
+from app.repositories.members import MemberRepository
 from app.repositories.menu import MenuRepository
+from app.services.auth import AuthService
 from app.services.locations import LocationService
 from app.services.menu import MenuService
 
@@ -41,6 +43,13 @@ def get_menu_repository(
     return MenuRepository(runner=runner, settings=settings)
 
 
+def get_member_repository(
+    runner: BigQueryRunner = Depends(get_bigquery_runner),
+    settings: Settings = Depends(get_settings),
+) -> MemberRepository:
+    return MemberRepository(runner=runner, settings=settings)
+
+
 def get_location_service(
     repository: LocationRepository = Depends(get_location_repository),
 ) -> LocationService:
@@ -51,3 +60,9 @@ def get_menu_service(
     repository: MenuRepository = Depends(get_menu_repository),
 ) -> MenuService:
     return MenuService(repository)
+
+
+def get_auth_service(
+    repository: MemberRepository = Depends(get_member_repository),
+) -> AuthService:
+    return AuthService(repository)

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     bq_dataset: str = Field(default="uncle_joes", alias="BQ_DATASET")
     bq_locations_table: str | None = Field(default=None, alias="BQ_LOCATIONS_TABLE")
     bq_menu_table: str | None = Field(default=None, alias="BQ_MENU_TABLE")
+    bq_members_table: str | None = Field(default=None, alias="BQ_MEMBERS_TABLE")
 
     location_id_column: str = Field(default="id", alias="LOCATION_ID_COLUMN")
     location_city_column: str = Field(default="city", alias="LOCATION_CITY_COLUMN")
@@ -134,6 +135,20 @@ class Settings(BaseSettings):
     menu_size_column: str = Field(default="size", alias="MENU_SIZE_COLUMN")
     menu_calories_column: str = Field(default="calories", alias="MENU_CALORIES_COLUMN")
     menu_price_column: str = Field(default="price", alias="MENU_PRICE_COLUMN")
+    member_id_column: str = Field(default="id", alias="MEMBER_ID_COLUMN")
+    member_first_name_column: str = Field(
+        default="first_name",
+        alias="MEMBER_FIRST_NAME_COLUMN",
+    )
+    member_last_name_column: str = Field(
+        default="last_name",
+        alias="MEMBER_LAST_NAME_COLUMN",
+    )
+    member_email_column: str = Field(default="email", alias="MEMBER_EMAIL_COLUMN")
+    member_password_column: str = Field(
+        default="password",
+        alias="MEMBER_PASSWORD_COLUMN",
+    )
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
@@ -162,6 +177,12 @@ class Settings(BaseSettings):
     def resolved_menu_table(self) -> str:
         return self.bq_menu_table or (
             f"{self.bigquery_project_id}.{self.bq_dataset}.menu_items"
+        )
+
+    @property
+    def resolved_members_table(self) -> str:
+        return self.bq_members_table or (
+            f"{self.bigquery_project_id}.{self.bq_dataset}.members"
         )
 
 

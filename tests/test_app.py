@@ -1,7 +1,9 @@
+import bcrypt
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import get_location_service, get_menu_service
+from app.api.dependencies import get_auth_service, get_location_service, get_menu_service
 from app.main import create_app
+from app.schemas.auth import LoginResponse
 from app.schemas.location import Location, LocationQueryParams
 from app.schemas.menu import MenuItem, MenuQueryParams
 
@@ -72,10 +74,28 @@ class StubMenuService:
         )
 
 
+class StubAuthService:
+    def login(self, email: str, password: str) -> LoginResponse:
+        submitted_bytes = password.encode("utf-8")
+        stored_hash = bcrypt.hashpw(b"Coffee123!", bcrypt.gensalt()).decode("utf-8")
+        if email != "member@example.com" or not bcrypt.checkpw(
+            submitted_bytes,
+            stored_hash.encode("utf-8"),
+        ):
+            raise ValueError("Invalid credentials for stub.")
+        return LoginResponse(
+            authenticated=True,
+            member_id="member-1",
+            name="Joe Smith",
+            email="member@example.com",
+        )
+
+
 def build_test_client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_location_service] = lambda: StubLocationService()
     app.dependency_overrides[get_menu_service] = lambda: StubMenuService()
+    app.dependency_overrides[get_auth_service] = lambda: StubAuthService()
     return TestClient(app)
 
 
@@ -99,3 +119,13 @@ def test_get_menu_item() -> None:
     response = client.get("/menu/latte")
     assert response.status_code == 200
     assert response.json()["item_id"] == "latte"
+
+
+def test_login_endpoint() -> None:
+    client = build_test_client()
+    response = client.post(
+        "/login",
+        json={"email": "member@example.com", "password": "Coffee123!"},
+    )
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True

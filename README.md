@@ -4,7 +4,7 @@ FastAPI backend for Uncle Joe's Coffee Shop. The API serves location and menu da
 
 ## What This Backend Does
 
-This backend exposes read-only API endpoints for the Uncle Joe's Coffee Shop app. It connects directly to Google BigQuery and returns real data for store locations and menu items so a frontend can consume that data later.
+This backend exposes API endpoints for the Uncle Joe's Coffee Shop app. It connects directly to Google BigQuery and returns real data for store locations, menu items, and Coffee Club member login so a frontend can consume that data later.
 
 The code is organized into:
 
@@ -19,6 +19,7 @@ The code is organized into:
 - `GET /locations/{location_id}`
 - `GET /menu`
 - `GET /menu/{item_id}`
+- `POST /login`
 - `GET /healthz`
 - `GET /readyz`
 - `GET /docs`
@@ -86,6 +87,24 @@ Example:
 curl "http://127.0.0.1:8000/menu/latte"
 ```
 
+### `POST /login`
+
+Authenticates a Coffee Club member against the `mgmt545proj.uncle_joes.members` table using the bcrypt password hash stored in BigQuery.
+
+Use this endpoint when the frontend needs to:
+
+- log a Coffee Club member into the app
+- validate the shared pilot password against a real stored bcrypt hash
+- retrieve the member's identity details after authentication
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"member@example.com","password":"Coffee123!"}'
+```
+
 ### `GET /healthz`
 
 Simple liveness check.
@@ -120,14 +139,49 @@ Recommended environment variables:
 - `BQ_DATASET` default: `uncle_joes`
 - `BQ_LOCATIONS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.locations`
 - `BQ_MENU_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.menu_items`
+- `BQ_MEMBERS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.members`
 - `CORS_ALLOW_ORIGINS` comma-separated list of allowed origins
 
 Optional column-mapping environment variables are supported when your BigQuery schema differs from the defaults. The defaults assume:
 
 - Locations: `id`, `city`, `state`, `address_one`, `address_two`, `location_map_address`, `zip_code`, `phone_number`, `email`, `fax_number`, `location_map_lat`, `location_map_lng`, `near_by`, `open_for_business`, `wifi`, `drive_thru`, `door_dash`, and the daily `hours_*_*` columns
 - Menu: `id`, `name`, `category`, `size`, `calories`, `price`
+- Members: `id`, `first_name`, `last_name`, `email`, `password`
 
 ## How To Run It Locally
+
+### Option 1: Poetry
+
+1. Install dependencies:
+
+```bash
+poetry install
+```
+
+2. Export environment variables:
+
+```bash
+export BQ_PROJECT_ID="mgmt545proj"
+export BQ_DATASET="uncle_joes"
+export BQ_LOCATIONS_TABLE="mgmt545proj.uncle_joes.locations"
+export BQ_MENU_TABLE="mgmt545proj.uncle_joes.menu_items"
+export BQ_MEMBERS_TABLE="mgmt545proj.uncle_joes.members"
+export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+```
+
+3. Make sure your Google Cloud credentials are available locally:
+
+```bash
+gcloud auth application-default login
+```
+
+4. Start the API:
+
+```bash
+poetry run uvicorn app.main:app --reload
+```
+
+### Option 2: Virtualenv + pip
 
 1. Create and activate a virtual environment:
 
@@ -149,6 +203,7 @@ export BQ_PROJECT_ID="your-gcp-project"
 export BQ_DATASET="uncle_joes"
 export BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations"
 export BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items"
+export BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members"
 export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
@@ -159,6 +214,7 @@ export BQ_PROJECT_ID="mgmt545proj"
 export BQ_DATASET="uncle_joes"
 export BQ_LOCATIONS_TABLE="mgmt545proj.uncle_joes.locations"
 export BQ_MENU_TABLE="mgmt545proj.uncle_joes.menu_items"
+export BQ_MEMBERS_TABLE="mgmt545proj.uncle_joes.members"
 ```
 
 4. Make sure your Google Cloud credentials are available locally so the BigQuery client can authenticate.
@@ -185,6 +241,18 @@ uvicorn app.main:app --reload
 PYTHONPATH=/Users/kyle816/GitHub/uncle-joes-api pytest
 ```
 
+## Login Implementation Notes
+
+The `/login` endpoint follows the same pattern as the course example:
+
+- accepts `email` and `password` over HTTP
+- hashes the submitted password with bcrypt for demonstration of secure handling
+- uses a parameterized BigQuery query to safely look up the member by email
+- verifies the submitted password with `bcrypt.checkpw()` against the stored hash
+- returns a `401` response when the email or password is invalid
+
+For this pilot, all Coffee Club members share the password `Coffee123!`, but authentication still checks the real bcrypt hash stored in BigQuery.
+
 ## Tests
 
 ```bash
@@ -201,6 +269,7 @@ docker run --rm -p 8080:8080 \
   -e BQ_PROJECT_ID="your-gcp-project" \
   -e BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations" \
   -e BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items" \
+  -e BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members" \
   uncle-joes-api
 ```
 
@@ -211,7 +280,7 @@ gcloud run deploy uncle-joes-api \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars BQ_PROJECT_ID=mgmt545proj,BQ_LOCATIONS_TABLE=mgmt545proj.uncle_joes.locations,BQ_MENU_TABLE=mgmt545proj.uncle_joes.menu_items,CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
+  --set-env-vars BQ_PROJECT_ID=mgmt545proj,BQ_LOCATIONS_TABLE=mgmt545proj.uncle_joes.locations,BQ_MENU_TABLE=mgmt545proj.uncle_joes.menu_items,BQ_MEMBERS_TABLE=mgmt545proj.uncle_joes.members,CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
 ```
 
 If your service account does not already have access, grant BigQuery read permissions to the Cloud Run runtime identity before deploying.

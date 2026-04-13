@@ -22,6 +22,12 @@ class DatabaseError(Exception):
         super().__init__(detail)
 
 
+class UnauthorizedError(Exception):
+    def __init__(self, detail: str = "Unauthorized.") -> None:
+        self.detail = detail
+        super().__init__(detail)
+
+
 def _error_response(status_code: int, detail: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -38,6 +44,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_database_error(_: Request, exc: DatabaseError) -> JSONResponse:
         logger.exception("Database error: %s", exc.detail)
         return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, exc.detail)
+
+    @app.exception_handler(UnauthorizedError)
+    async def handle_unauthorized(_: Request, exc: UnauthorizedError) -> JSONResponse:
+        return _error_response(status.HTTP_401_UNAUTHORIZED, exc.detail)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
