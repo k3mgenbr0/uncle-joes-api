@@ -6,10 +6,12 @@ ENV PORT=8080
 
 WORKDIR /app
 
-COPY requirements.txt README.md ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir poetry
+
+COPY pyproject.toml README.md ./
+RUN poetry install --no-root --only main
 
 COPY app ./app
 COPY main.py ./main.py
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "poetry run uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
