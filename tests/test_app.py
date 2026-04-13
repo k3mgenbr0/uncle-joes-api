@@ -11,26 +11,40 @@ class StubLocationService:
         return [
             Location(
                 location_id="101",
-                name="Downtown",
-                address="123 Main St",
                 city=params.city or "Indianapolis",
                 state=params.state or "IN",
                 postal_code="46204",
+                address_one="123 Main St",
+                map_address="123 Main St, Indianapolis, IN 46204",
                 phone="317-555-0101",
-                hours="6am-6pm",
+                email="store101@example.com",
+                latitude=39.7684,
+                longitude=-86.1581,
+                near_by="Monument Circle",
+                open_for_business=True,
+                wifi=True,
+                drive_thru=False,
+                door_dash=True,
             )
         ]
 
     def get_location(self, location_id: str) -> Location:
         return Location(
             location_id=location_id,
-            name="Downtown",
-            address="123 Main St",
             city="Indianapolis",
             state="IN",
             postal_code="46204",
+            address_one="123 Main St",
+            map_address="123 Main St, Indianapolis, IN 46204",
             phone="317-555-0101",
-            hours="6am-6pm",
+            email="store101@example.com",
+            latitude=39.7684,
+            longitude=-86.1581,
+            near_by="Monument Circle",
+            open_for_business=True,
+            wifi=True,
+            drive_thru=False,
+            door_dash=True,
         )
 
 
@@ -41,10 +55,9 @@ class StubMenuService:
                 item_id="latte",
                 name="Latte",
                 category=params.category or "Espresso",
-                description="Espresso with steamed milk",
+                size="Medium",
+                calories=190,
                 price=4.5,
-                currency="USD",
-                is_available=True,
             )
         ]
 
@@ -53,10 +66,9 @@ class StubMenuService:
             item_id=item_id,
             name="Latte",
             category="Espresso",
-            description="Espresso with steamed milk",
+            size="Medium",
+            calories=190,
             price=4.5,
-            currency="USD",
-            is_available=True,
         )
 
 

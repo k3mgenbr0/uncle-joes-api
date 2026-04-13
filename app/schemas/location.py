@@ -1,17 +1,42 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class LocationHoursDay(BaseModel):
+    open: str | None = None
+    close: str | None = None
+
+
+class LocationHours(BaseModel):
+    monday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    tuesday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    wednesday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    thursday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    friday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    saturday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+    sunday: LocationHoursDay = Field(default_factory=LocationHoursDay)
+
+
 class Location(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     location_id: str
-    name: str
-    address: str
     city: str
     state: str
+    address_one: str | None = None
+    address_two: str | None = None
+    map_address: str | None = None
     postal_code: str | None = None
     phone: str | None = None
-    hours: str | None = None
+    email: str | None = None
+    fax_number: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    near_by: str | None = None
+    open_for_business: bool | None = None
+    wifi: bool | None = None
+    drive_thru: bool | None = None
+    door_dash: bool | None = None
+    hours: LocationHours = Field(default_factory=LocationHours)
 
 
 class LocationQueryParams(BaseModel):

@@ -7,10 +7,9 @@ class MenuItem(BaseModel):
     item_id: str
     name: str
     category: str | None = None
-    description: str | None = None
+    size: str | None = None
+    calories: int | None = None
     price: float
-    currency: str = "USD"
-    is_available: bool = True
 
 
 class MenuQueryParams(BaseModel):
