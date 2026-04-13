@@ -1,0 +1,10 @@
+.git
+.pytest_cache
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+property-management-frontend/node_modules/
+property-management-frontend/dist/
