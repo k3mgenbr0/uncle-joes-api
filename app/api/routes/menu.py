@@ -2,10 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_menu_service
+from app.api.dependencies import get_menu_service, get_recommendations_service
 from app.schemas.common import ErrorResponse
-from app.schemas.menu import MenuItem, MenuQueryParams
+from app.schemas.menu import MenuItem, MenuQueryParams, MenuRecommendation
 from app.services.menu import MenuService
+from app.services.recommendations import RecommendationsService
 
 
 router = APIRouter(prefix="/menu", tags=["menu"])
@@ -50,3 +51,18 @@ def get_menu_item(
     service: MenuService = Depends(get_menu_service),
 ) -> MenuItem:
     return service.get_menu_item(item_id)
+
+
+@router.get(
+    "/recommendations",
+    response_model=list[MenuRecommendation],
+    responses={500: {"model": ErrorResponse}},
+    summary="Get recommended menu items",
+)
+def get_menu_recommendations(
+    kind: Annotated[str, Query(pattern="^(all_time|seasonal)$")] = "all_time",
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    service: RecommendationsService = Depends(get_recommendations_service),
+) -> list[MenuRecommendation]:
+    return service.get_recommendations(kind, limit, window_days)

@@ -74,3 +74,9 @@ class OrderService:
 
     def calculate_location_stats(self, store_id: str) -> dict:
         return self._repository.get_location_stats(store_id)
+
+    def list_location_daily_stats(self, store_id: str, limit: int) -> list[dict]:
+        return self._repository.get_location_daily_stats(store_id, limit)
+
+    def list_location_weekly_stats(self, store_id: str, limit: int) -> list[dict]:
+        return self._repository.get_location_weekly_stats(store_id, limit)

@@ -121,6 +121,47 @@ class OrderRepository:
             "avg_order_total": 0.0,
         }
 
+    def get_location_daily_stats(self, store_id: str, limit: int) -> list[dict]:
+        query = f"""
+            SELECT
+                CAST(@store_id AS STRING) AS store_id,
+                CAST(DATE({self._order_date_column}) AS STRING) AS order_date,
+                COUNT(1) AS total_orders,
+                COALESCE(SUM(SAFE_CAST({self._order_total_column} AS FLOAT64)), 0.0)
+                    AS total_revenue
+            FROM {self._orders_table}
+            WHERE CAST({self._order_store_id_column} AS STRING) = @store_id
+            GROUP BY order_date
+            ORDER BY order_date DESC
+            LIMIT @limit
+        """
+        params = [
+            bigquery.ScalarQueryParameter("store_id", "STRING", store_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
+        return self._runner.fetch_all(query, params)
+
+    def get_location_weekly_stats(self, store_id: str, limit: int) -> list[dict]:
+        query = f"""
+            SELECT
+                CAST(@store_id AS STRING) AS store_id,
+                CAST(DATE_TRUNC(DATE({self._order_date_column}), WEEK(MONDAY)) AS STRING)
+                    AS week_start,
+                COUNT(1) AS total_orders,
+                COALESCE(SUM(SAFE_CAST({self._order_total_column} AS FLOAT64)), 0.0)
+                    AS total_revenue
+            FROM {self._orders_table}
+            WHERE CAST({self._order_store_id_column} AS STRING) = @store_id
+            GROUP BY week_start
+            ORDER BY week_start DESC
+            LIMIT @limit
+        """
+        params = [
+            bigquery.ScalarQueryParameter("store_id", "STRING", store_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
+        return self._runner.fetch_all(query, params)
+
     def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
         sort_map = {
             "order_date": self._order_date_column,

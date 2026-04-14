@@ -6,7 +6,7 @@ from app.api.dependencies import get_location_service, get_order_service
 from app.schemas.common import ErrorResponse
 from app.schemas.location import Location, LocationQueryParams
 from app.schemas.order import Order, OrderQueryParams
-from app.schemas.stats import LocationOrderStats
+from app.schemas.stats import LocationDailyStats, LocationOrderStats, LocationWeeklyStats
 from app.services.locations import LocationService
 from app.services.orders import OrderService
 
@@ -98,3 +98,37 @@ def get_location_stats(
     location_service.get_location(location_id)
     stats_row = order_service.calculate_location_stats(location_id)
     return LocationOrderStats.model_validate(stats_row)
+
+
+@router.get(
+    "/{location_id}/stats/daily",
+    response_model=list[LocationDailyStats],
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get daily order stats for a location",
+)
+def get_location_daily_stats(
+    location_id: str,
+    limit: Annotated[int, Query(ge=1, le=366)] = 30,
+    location_service: LocationService = Depends(get_location_service),
+    order_service: OrderService = Depends(get_order_service),
+) -> list[LocationDailyStats]:
+    location_service.get_location(location_id)
+    rows = order_service.list_location_daily_stats(location_id, limit)
+    return [LocationDailyStats.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/{location_id}/stats/weekly",
+    response_model=list[LocationWeeklyStats],
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get weekly order stats for a location",
+)
+def get_location_weekly_stats(
+    location_id: str,
+    limit: Annotated[int, Query(ge=1, le=260)] = 12,
+    location_service: LocationService = Depends(get_location_service),
+    order_service: OrderService = Depends(get_order_service),
+) -> list[LocationWeeklyStats]:
+    location_service.get_location(location_id)
+    rows = order_service.list_location_weekly_stats(location_id, limit)
+    return [LocationWeeklyStats.model_validate(row) for row in rows]

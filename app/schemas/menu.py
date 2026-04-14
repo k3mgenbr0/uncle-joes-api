@@ -13,6 +13,15 @@ class MenuItem(BaseModel):
     price_display: str | None = None
 
 
+class MenuRecommendation(BaseModel):
+    item_id: str
+    item_name: str | None = None
+    total_quantity: int
+    total_revenue: float
+    kind: str
+    window_days: int | None = None
+
+
 class MenuQueryParams(BaseModel):
     category: str | None = Field(default=None)
     min_price: float | None = Field(default=None, ge=0)

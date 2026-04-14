@@ -16,6 +16,7 @@ from app.services.locations import LocationService
 from app.services.members import MemberService
 from app.services.menu import MenuService
 from app.services.orders import OrderService
+from app.services.recommendations import RecommendationsService
 from app.services.search import SearchService
 from app.services.stats import StatsService
 
@@ -118,3 +119,9 @@ def get_stats_service(
     repository: StatsRepository = Depends(get_stats_repository),
 ) -> StatsService:
     return StatsService(repository)
+
+
+def get_recommendations_service(
+    repository: StatsRepository = Depends(get_stats_repository),
+) -> RecommendationsService:
+    return RecommendationsService(repository)

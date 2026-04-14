@@ -27,3 +27,17 @@ class LocationOrderStats(BaseModel):
     total_orders: int
     total_revenue: float
     avg_order_total: float
+
+
+class LocationDailyStats(BaseModel):
+    store_id: str
+    order_date: str
+    total_orders: int
+    total_revenue: float
+
+
+class LocationWeeklyStats(BaseModel):
+    store_id: str
+    week_start: str
+    total_orders: int
+    total_revenue: float

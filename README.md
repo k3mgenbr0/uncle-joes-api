@@ -1,428 +1,123 @@
 # Uncle Joe's Coffee Shop API
 
-FastAPI backend for Uncle Joe's Coffee Shop. The API serves location and menu data directly from BigQuery and is structured for future frontend integration.
+## Project Overview
+This backend powers the Uncle Joe’s Coffee Shop app. It connects to Google BigQuery and exposes an HTTP API that a frontend can call to show locations, menu items, member profiles, orders, search, and stats.
 
-## What This Backend Does
+## What This API Does
+- **Locations**: list and filter store locations, plus store‑level orders and stats
+- **Menu**: list, filter, sort, and recommend menu items
+- **Members + Orders**: login, profile lookup, order history, and loyalty points
+- **Search + Stats**: search across locations and menu, plus analytics endpoints
 
-This backend exposes API endpoints for the Uncle Joe's Coffee Shop app. It connects directly to Google BigQuery and returns real data for store locations, menu items, and Coffee Club member login so a frontend can consume that data later.
-
-The code is organized into:
-
-- route modules for the HTTP endpoints
-- schemas for typed API responses
-- service and repository layers for clean BigQuery access
-- environment-driven configuration for local development and Cloud Run deployment
-
-## Endpoints And Their Purpose
-
-- `GET /locations`
-- `GET /locations/{location_id}`
-- `GET /menu`
-- `GET /menu/{item_id}`
-- `POST /login`
-- `GET /members/{member_id}`
-- `GET /members/{member_id}/orders`
-- `GET /members/{member_id}/points`
-- `GET /search`
-- `GET /stats/orders`
-- `GET /stats/top-items`
-- `GET /stats/top-locations`
-- `GET /locations/{location_id}/orders`
-- `GET /locations/{location_id}/stats`
-- `GET /healthz`
-- `GET /readyz`
-- `GET /docs`
+## API Endpoints (Core Section)
 
 ### `GET /locations`
+Lists store locations.  
+Use case: store locator page and filtering.
 
-Returns a list of store locations from `mgmt545proj.uncle_joes.locations`.
-
-Use this endpoint when the frontend needs to:
-
-- show all coffee shop locations
-- filter locations by `state`
-- filter locations by `city`
-- filter locations by `open_for_business`, `wifi`, `drive_thru`, and `door_dash`
-- paginate through results with `limit` and `offset`
-
-Response fields also include:
-
-- `full_address` (computed)
-- `hours_today` (computed)
-- `open_now` (computed)
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/locations?state=IN&city=Indianapolis&limit=25&offset=0"
-```
+Supports: `state`, `city`, `open_for_business`, `wifi`, `drive_thru`, `door_dash`, `limit`, `offset`.
 
 ### `GET /locations/{location_id}`
-
-Returns one specific location by its BigQuery `id`.
-
-Use this endpoint when the frontend needs to:
-
-- show a single store detail page
-- load one location after a user clicks a location card or map pin
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/locations/123"
-```
+Returns one location by ID.  
+Use case: store detail page.
 
 ### `GET /menu`
+Lists menu items.  
+Use case: menu page with filters and sorting.
 
-Returns a list of menu items from `mgmt545proj.uncle_joes.menu_items`.
-
-Use this endpoint when the frontend needs to:
-
-- show the full menu
-- filter menu items by `category`
-- filter menu items by `min_price` and `max_price`
-- paginate menu items with `limit` and `offset`
-
-Response fields also include:
-
-- `price_display` (computed)
-
-### Sorting
-
-Menu supports:
-
-- `sort_by`: `name`, `price`, `calories`, `category`
-- `sort_dir`: `asc` or `desc`
-
-Orders support:
-
-- `sort_by`: `order_date`, `order_total`, `order_id`
-- `sort_dir`: `asc` or `desc`
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/menu?category=Espresso&limit=20&offset=0"
-```
+Supports: `category`, `min_price`, `max_price`, `sort_by`, `sort_dir`, `limit`, `offset`.
 
 ### `GET /menu/{item_id}`
+Returns one menu item by ID.  
+Use case: menu item detail view.
 
-Returns one specific menu item by its BigQuery `id`.
+## API Endpoints (Expanded)
 
-Use this endpoint when the frontend needs to:
-
-- load one menu item for a detail view
-- fetch a single item after it is selected in the UI
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/menu/latte"
-```
+These endpoints add richer functionality for a full‑feature frontend: authentication, member views, order history, analytics, and cross‑entity search.
 
 ### `POST /login`
+Authenticates a Coffee Club member by email and password.  
+Use case: login form for the member portal.
 
-Authenticates a Coffee Club member against the `mgmt545proj.uncle_joes.members` table using the bcrypt password hash stored in BigQuery.
-
-Use this endpoint when the frontend needs to:
-
-- log a Coffee Club member into the app
-- validate the shared pilot password against a real stored bcrypt hash
-- retrieve the member's identity details after authentication
-
-Example:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"member@example.com","password":"Coffee123!"}'
-```
+Behavior notes:
+- Compares the submitted password against the bcrypt hash stored in BigQuery.
+- Returns a small profile summary on success.
 
 ### `GET /members/{member_id}`
-
-Returns a Coffee Club member profile from `mgmt545proj.uncle_joes.members`.
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/members/member-1"
-```
+Returns a member profile (name, email, home store, etc.).  
+Use case: account/profile page.
 
 ### `GET /members/{member_id}/orders`
+Returns a member’s order history in reverse‑chronological order.  
+Use case: “Past Orders” screen with optional line items.
 
-Returns a member’s order history from `mgmt545proj.uncle_joes.orders`.
-
-Optional query parameters:
-
-- `limit`, `offset`
-- `include_items=true` to include `order_items`
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/members/member-1/orders?limit=25&offset=0&include_items=true"
-```
+Supports: `limit`, `offset`, `include_items`, `sort_by`, `sort_dir`.
 
 ### `GET /members/{member_id}/points`
-
-Returns the member’s loyalty points, calculated as the sum of `floor(order_total)` for all orders.
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/members/member-1/points"
-```
-
-### `GET /search`
-
-Searches both locations and menu items with a single query string.
-
-Optional query parameters:
-
-- `scope=all|locations|menu`
-
-Example:
-
-```bash
-curl "http://127.0.0.1:8000/search?query=latte&limit=10"
-```
+Returns loyalty points, calculated as the sum of `floor(order_total)` across orders.  
+Use case: rewards summary and points balance display.
 
 ### `GET /locations/{location_id}/orders`
+Returns orders placed at a specific store.  
+Use case: store performance view and staff dashboards.
 
-Returns orders for a specific location.
-
-Optional query parameters:
-
-- `limit`, `offset`
-- `include_items=true`
-- `sort_by`, `sort_dir`
-
-```bash
-curl "http://127.0.0.1:8000/locations/101/orders?limit=25&offset=0&include_items=true"
-```
+Supports: `limit`, `offset`, `include_items`, `sort_by`, `sort_dir`.
 
 ### `GET /locations/{location_id}/stats`
+Returns store‑level totals: total orders, total revenue, and average order value.  
+Use case: store dashboard summary widget.
 
-Returns order stats for a specific location.
+### `GET /locations/{location_id}/stats/daily`
+Returns daily order totals for a store (date + totals).  
+Use case: daily trend chart or ops reporting.
 
-```bash
-curl "http://127.0.0.1:8000/locations/101/stats"
-```
+### `GET /locations/{location_id}/stats/weekly`
+Returns weekly order totals for a store (week + totals).  
+Use case: week‑over‑week trend chart.
+
+### `GET /search`
+Searches locations and menu items using a single query string.  
+Use case: global search bar and “quick find.”
+
+Supports: `scope=all|locations|menu`, `limit`.
 
 ### `GET /stats/orders`
-
-Returns overall order stats (total orders, total revenue, average order total).
-
-```bash
-curl "http://127.0.0.1:8000/stats/orders"
-```
+Returns overall order stats for the entire business.  
+Use case: admin dashboard and executive summary.
 
 ### `GET /stats/top-items`
-
-Returns top-selling menu items by quantity.
-
-```bash
-curl "http://127.0.0.1:8000/stats/top-items?limit=10"
-```
+Returns top‑selling menu items based on order history.  
+Use case: merchandising, promo planning, and “top sellers” modules.
 
 ### `GET /stats/top-locations`
+Returns top‑performing locations by revenue/orders.  
+Use case: regional performance view.
 
-Returns top-performing locations by number of orders.
+### `GET /menu/recommendations`
+Returns recommended menu items derived from order history.  
+Use case: “popular items” and “seasonal favorites” sections.
 
-```bash
-curl "http://127.0.0.1:8000/stats/top-locations?limit=10"
-```
-
-### `GET /healthz`
-
-Simple liveness check.
-
-Use this endpoint when you want to confirm the API process is up.
-
-### `GET /readyz`
-
-Readiness check that verifies the app can reach BigQuery.
-
-Use this endpoint when you want to confirm the service is ready to serve real data in deployment.
+Supports: `kind=all_time|seasonal`, `window_days`, `limit`.
 
 ### `GET /docs`
+Interactive API documentation (Swagger UI).
 
-Interactive Swagger UI generated by FastAPI.
+### `GET /healthz` and `GET /readyz`
+Health checks for uptime and BigQuery connectivity.
 
-Use this endpoint when you want to:
+## Key Features
+- BigQuery integration (real data, no mocks)
+- Cloud Run ready
+- CORS enabled for frontend use
+- Swagger docs at `/docs`
+- Filtering, pagination, sorting, search
+- Store and global stats endpoints
 
-- inspect request and response models
-- test endpoints in the browser
-- share API behavior with teammates
+## How to Run (Minimal)
+1. Install dependencies: `poetry install`
+2. Start the API: `poetry run uvicorn main:app --reload`
 
-## Configuration
-
-Required environment variables:
-
-- `BQ_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`
-
-Recommended environment variables:
-
-- `BQ_PROJECT_ID` default: `mgmt545proj`
-- `BQ_DATASET` default: `uncle_joes`
-- `BQ_LOCATIONS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.locations`
-- `BQ_MENU_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.menu_items`
-- `BQ_MEMBERS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.members`
-- `BQ_ORDERS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.orders`
-- `BQ_ORDER_ITEMS_TABLE` full table ID override, default: `mgmt545proj.uncle_joes.order_items`
-- `CORS_ALLOW_ORIGINS` comma-separated list of allowed origins
-
-Optional column-mapping environment variables are supported when your BigQuery schema differs from the defaults. The defaults assume:
-
-- Locations: `id`, `city`, `state`, `address_one`, `address_two`, `location_map_address`, `zip_code`, `phone_number`, `email`, `fax_number`, `location_map_lat`, `location_map_lng`, `near_by`, `open_for_business`, `wifi`, `drive_thru`, `door_dash`, and the daily `hours_*_*` columns
-- Menu: `id`, `name`, `category`, `size`, `calories`, `price`
-- Members: `id`, `first_name`, `last_name`, `email`, `password`
-
-## How To Run It Locally
-
-### Option 1: Poetry
-
-1. Install dependencies:
-
-```bash
-poetry install
-```
-
-2. Export environment variables:
-
-```bash
-export BQ_PROJECT_ID="mgmt545proj"
-export BQ_DATASET="uncle_joes"
-export BQ_LOCATIONS_TABLE="mgmt545proj.uncle_joes.locations"
-export BQ_MENU_TABLE="mgmt545proj.uncle_joes.menu_items"
-export BQ_MEMBERS_TABLE="mgmt545proj.uncle_joes.members"
-export BQ_ORDERS_TABLE="mgmt545proj.uncle_joes.orders"
-export BQ_ORDER_ITEMS_TABLE="mgmt545proj.uncle_joes.order_items"
-export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
-```
-
-3. Make sure your Google Cloud credentials are available locally:
-
-```bash
-gcloud auth application-default login
-```
-
-4. Start the API:
-
-```bash
-poetry run uvicorn main:app --reload
-```
-
-### Option 2: Virtualenv + pip
-
-1. Create and activate a virtual environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-2. Install the app and development dependencies:
-
-```bash
-pip install -e .[dev]
-```
-
-3. Export environment variables:
-
-```bash
-export BQ_PROJECT_ID="your-gcp-project"
-export BQ_DATASET="uncle_joes"
-export BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations"
-export BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items"
-export BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members"
-export BQ_ORDERS_TABLE="your-gcp-project.uncle_joes.orders"
-export BQ_ORDER_ITEMS_TABLE="your-gcp-project.uncle_joes.order_items"
-export CORS_ALLOW_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
-```
-
-For your current project, the real defaults are:
-
-```bash
-export BQ_PROJECT_ID="mgmt545proj"
-export BQ_DATASET="uncle_joes"
-export BQ_LOCATIONS_TABLE="mgmt545proj.uncle_joes.locations"
-export BQ_MENU_TABLE="mgmt545proj.uncle_joes.menu_items"
-export BQ_MEMBERS_TABLE="mgmt545proj.uncle_joes.members"
-```
-
-4. Make sure your Google Cloud credentials are available locally so the BigQuery client can authenticate.
-
-If you are using Application Default Credentials, one common setup is:
-
-```bash
-gcloud auth application-default login
-```
-
-5. Start the FastAPI server:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-You can also use the starter-style command:
-
-```bash
-python -m uvicorn main:app --reload
-```
-
-6. Open the API docs in the browser:
-
-- [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-7. Run tests if needed:
-
-```bash
-PYTHONPATH=/Users/kyle816/GitHub/uncle-joes-api pytest
-```
-
-## Login Implementation Notes
-
-The `/login` endpoint follows the same pattern as the course example:
-
-- accepts `email` and `password` over HTTP
-- hashes the submitted password with bcrypt for demonstration of secure handling
-- uses a parameterized BigQuery query to safely look up the member by email
-- verifies the submitted password with `bcrypt.checkpw()` against the stored hash
-- returns a `401` response when the email or password is invalid
-
-For this pilot, all Coffee Club members share the password `Coffee123!`, but authentication still checks the real bcrypt hash stored in BigQuery.
-
-## Tests
-
-```bash
-PYTHONPATH=/Users/kyle816/GitHub/uncle-joes-api pytest
-```
-
-## Cloud Run Deployment
-
-Build the container locally if you want to verify the image:
-
-```bash
-docker build -t uncle-joes-api .
-docker run --rm -p 8080:8080 \
-  -e BQ_PROJECT_ID="your-gcp-project" \
-  -e BQ_LOCATIONS_TABLE="your-gcp-project.uncle_joes.locations" \
-  -e BQ_MENU_TABLE="your-gcp-project.uncle_joes.menu_items" \
-  -e BQ_MEMBERS_TABLE="your-gcp-project.uncle_joes.members" \
-  -e BQ_ORDERS_TABLE="your-gcp-project.uncle_joes.orders" \
-  -e BQ_ORDER_ITEMS_TABLE="your-gcp-project.uncle_joes.order_items" \
-  uncle-joes-api
-```
-
-Deploy to Cloud Run:
-
-```bash
-gcloud run deploy uncle-joes-api \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars BQ_PROJECT_ID=mgmt545proj,BQ_LOCATIONS_TABLE=mgmt545proj.uncle_joes.locations,BQ_MENU_TABLE=mgmt545proj.uncle_joes.menu_items,BQ_MEMBERS_TABLE=mgmt545proj.uncle_joes.members,BQ_ORDERS_TABLE=mgmt545proj.uncle_joes.orders,BQ_ORDER_ITEMS_TABLE=mgmt545proj.uncle_joes.order_items,CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
-```
-
-If your service account does not already have access, grant BigQuery read permissions to the Cloud Run runtime identity before deploying.
+## How to Use the API
+- Base URL: `http://127.0.0.1:8000`
+- Open docs: `http://127.0.0.1:8000/docs`
+- A frontend should call the endpoints above to fetch data for pages, search, and dashboards.

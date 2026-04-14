@@ -14,9 +14,13 @@ class StatsRepository:
         self._order_id_column = quote_column(settings.order_id_column)
         self._order_store_id_column = quote_column(settings.order_store_id_column)
         self._order_total_column = quote_column(settings.order_total_column)
+        self._order_date_column = quote_column(settings.order_date_column)
 
         self._order_item_menu_item_id_column = quote_column(
             settings.order_item_menu_item_id_column
+        )
+        self._order_item_order_id_column = quote_column(
+            settings.order_item_order_id_column
         )
         self._order_item_name_column = quote_column(settings.order_item_name_column)
         self._order_item_quantity_column = quote_column(settings.order_item_quantity_column)
@@ -82,4 +86,33 @@ class StatsRepository:
             LIMIT @limit
         """
         params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+        return self._runner.fetch_all(query, params)
+
+    def get_top_menu_items_window(self, days: int, limit: int) -> list[dict]:
+        query = f"""
+            SELECT
+                CAST(oi.{self._order_item_menu_item_id_column} AS STRING) AS menu_item_id,
+                CAST(oi.{self._order_item_name_column} AS STRING) AS item_name,
+                COALESCE(SUM(SAFE_CAST(oi.{self._order_item_quantity_column} AS INT64)), 0)
+                    AS total_quantity,
+                COALESCE(
+                    SUM(
+                        SAFE_CAST(oi.{self._order_item_quantity_column} AS FLOAT64)
+                        * SAFE_CAST(oi.{self._order_item_price_column} AS FLOAT64)
+                    ),
+                    0.0
+                ) AS total_revenue
+            FROM {self._order_items_table} oi
+            JOIN {self._orders_table} o
+                ON CAST(oi.{self._order_item_order_id_column} AS STRING)
+                = CAST(o.{self._order_id_column} AS STRING)
+            WHERE DATE(o.{self._order_date_column}) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)
+            GROUP BY menu_item_id, item_name
+            ORDER BY total_quantity DESC, total_revenue DESC
+            LIMIT @limit
+        """
+        params = [
+            bigquery.ScalarQueryParameter("days", "INT64", days),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
         return self._runner.fetch_all(query, params)

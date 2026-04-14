@@ -7,6 +7,7 @@ from app.api.dependencies import (
     get_member_service,
     get_menu_service,
     get_order_service,
+    get_recommendations_service,
     get_search_service,
     get_stats_service,
 )
@@ -150,6 +151,26 @@ class StubOrderService:
             "avg_order_total": 8.5,
         }
 
+    def list_location_daily_stats(self, store_id: str, limit: int) -> list[dict]:
+        return [
+            {
+                "store_id": store_id,
+                "order_date": "2026-04-12",
+                "total_orders": 2,
+                "total_revenue": 15.0,
+            }
+        ]
+
+    def list_location_weekly_stats(self, store_id: str, limit: int) -> list[dict]:
+        return [
+            {
+                "store_id": store_id,
+                "week_start": "2026-04-07",
+                "total_orders": 5,
+                "total_revenue": 40.0,
+            }
+        ]
+
 
 class StubSearchService:
     def search(self, query: str, limit: int, scope: str) -> SearchResponse:
@@ -188,6 +209,20 @@ class StubStatsService:
         ]
 
 
+class StubRecommendationsService:
+    def get_recommendations(self, kind: str, limit: int, window_days: int | None):
+        return [
+            {
+                "item_id": "latte",
+                "item_name": "Latte",
+                "total_quantity": 100,
+                "total_revenue": 450.0,
+                "kind": kind,
+                "window_days": window_days,
+            }
+        ]
+
+
 def build_test_client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_location_service] = lambda: StubLocationService()
@@ -197,6 +232,7 @@ def build_test_client() -> TestClient:
     app.dependency_overrides[get_order_service] = lambda: StubOrderService()
     app.dependency_overrides[get_search_service] = lambda: StubSearchService()
     app.dependency_overrides[get_stats_service] = lambda: StubStatsService()
+    app.dependency_overrides[get_recommendations_service] = lambda: StubRecommendationsService()
     return TestClient(app)
 
 
@@ -268,6 +304,16 @@ def test_location_orders_and_stats_endpoints() -> None:
     response = client.get("/locations/101/stats")
     assert response.status_code == 200
     assert response.json()["store_id"] == "101"
+    response = client.get("/locations/101/stats/daily")
+    assert response.status_code == 200
+    response = client.get("/locations/101/stats/weekly")
+    assert response.status_code == 200
+
+
+def test_menu_recommendations_endpoint() -> None:
+    client = build_test_client()
+    response = client.get("/menu/recommendations")
+    assert response.status_code == 200
 
 
 def test_stats_endpoints() -> None:
