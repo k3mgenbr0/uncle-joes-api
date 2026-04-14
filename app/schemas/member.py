@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.schemas.order import Order
 
 
 class Member(BaseModel):
@@ -20,3 +24,27 @@ class MemberQueryParams(BaseModel):
 class MemberPoints(BaseModel):
     member_id: str
     total_points: int
+
+
+class MemberFavoriteItem(BaseModel):
+    menu_item_id: str
+    item_name: str | None = None
+    total_orders: int
+    total_quantity: int
+    total_revenue: float
+
+
+class MemberFavoriteTrendPoint(BaseModel):
+    menu_item_id: str
+    item_name: str | None = None
+    week_start: str
+    total_orders: int
+    total_quantity: int
+    total_revenue: float
+
+
+class MemberSummary(BaseModel):
+    member: Member
+    points: MemberPoints
+    recent_orders: list[Order]
+    favorites: list[MemberFavoriteItem]

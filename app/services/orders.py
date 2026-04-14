@@ -1,6 +1,7 @@
 import logging
 
 from app.repositories.orders import OrderRepository
+from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint
 from app.schemas.order import Order, OrderItem, OrderQueryParams
 
 
@@ -80,3 +81,29 @@ class OrderService:
 
     def list_location_weekly_stats(self, store_id: str, limit: int) -> list[dict]:
         return self._repository.get_location_weekly_stats(store_id, limit)
+
+    def list_member_favorites(
+        self,
+        member_id: str,
+        limit: int,
+        window_days: int | None = None,
+    ) -> list[MemberFavoriteItem]:
+        rows = self._repository.list_member_favorites(
+            member_id,
+            limit,
+            window_days=window_days,
+        )
+        return [MemberFavoriteItem.model_validate(row) for row in rows]
+
+    def list_member_favorite_trends(
+        self,
+        member_id: str,
+        limit_items: int,
+        window_days: int,
+    ) -> list[MemberFavoriteTrendPoint]:
+        rows = self._repository.list_member_favorite_trends(
+            member_id,
+            limit_items,
+            window_days,
+        )
+        return [MemberFavoriteTrendPoint.model_validate(row) for row in rows]

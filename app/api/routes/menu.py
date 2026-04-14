@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_menu_service, get_recommendations_service
 from app.schemas.common import ErrorResponse
-from app.schemas.menu import MenuItem, MenuQueryParams, MenuRecommendation
+from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams, MenuRecommendation
 from app.services.menu import MenuService
 from app.services.recommendations import RecommendationsService
 
@@ -66,3 +66,41 @@ def get_menu_recommendations(
     service: RecommendationsService = Depends(get_recommendations_service),
 ) -> list[MenuRecommendation]:
     return service.get_recommendations(kind, limit, window_days)
+
+
+@router.get(
+    "/categories",
+    response_model=list[str],
+    responses={500: {"model": ErrorResponse}},
+    summary="List menu categories",
+)
+def list_menu_categories(
+    service: MenuService = Depends(get_menu_service),
+) -> list[str]:
+    return service.list_categories()
+
+
+@router.get(
+    "/sizes",
+    response_model=list[str],
+    responses={500: {"model": ErrorResponse}},
+    summary="List menu sizes",
+)
+def list_menu_sizes(
+    service: MenuService = Depends(get_menu_service),
+) -> list[str]:
+    return service.list_sizes()
+
+
+@router.get(
+    "/{item_id}/stats",
+    response_model=MenuItemStats,
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get menu item stats",
+)
+def get_menu_item_stats(
+    item_id: str,
+    window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    service: MenuService = Depends(get_menu_service),
+) -> MenuItemStats:
+    return service.get_menu_item_stats(item_id, window_days=window_days)

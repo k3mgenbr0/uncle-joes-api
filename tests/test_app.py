@@ -14,8 +14,13 @@ from app.api.dependencies import (
 from app.main import create_app
 from app.schemas.auth import LoginResponse
 from app.schemas.location import Location, LocationQueryParams
-from app.schemas.member import Member, MemberPoints
-from app.schemas.menu import MenuItem, MenuQueryParams
+from app.schemas.member import (
+    Member,
+    MemberFavoriteItem,
+    MemberFavoriteTrendPoint,
+    MemberPoints,
+)
+from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
 from app.schemas.order import Order, OrderQueryParams
 from app.schemas.search import SearchResponse, SearchResult
 from app.schemas.stats import OrderStats, TopLocation, TopMenuItem
@@ -84,6 +89,21 @@ class StubMenuService:
             size="Medium",
             calories=190,
             price=4.5,
+        )
+
+    def list_categories(self) -> list[str]:
+        return ["Coffee", "Tea"]
+
+    def list_sizes(self) -> list[str]:
+        return ["Small", "Medium", "Large"]
+
+    def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> MenuItemStats:
+        return MenuItemStats(
+            item_id=item_id,
+            total_orders=25,
+            total_quantity=100,
+            total_revenue=450.0,
+            last_order_date="2026-04-12",
         )
 
 
@@ -171,9 +191,51 @@ class StubOrderService:
             }
         ]
 
+    def list_member_favorites(
+        self,
+        member_id: str,
+        limit: int,
+        window_days: int | None = None,
+    ) -> list[MemberFavoriteItem]:
+        return [
+            MemberFavoriteItem(
+                menu_item_id="latte",
+                item_name="Latte",
+                total_orders=10,
+                total_quantity=25,
+                total_revenue=112.5,
+            )
+        ]
+
+    def list_member_favorite_trends(
+        self,
+        member_id: str,
+        limit_items: int,
+        window_days: int,
+    ) -> list[MemberFavoriteTrendPoint]:
+        return [
+            MemberFavoriteTrendPoint(
+                menu_item_id="latte",
+                item_name="Latte",
+                week_start="2026-03-31",
+                total_orders=3,
+                total_quantity=8,
+                total_revenue=36.0,
+            )
+        ]
+
 
 class StubSearchService:
-    def search(self, query: str, limit: int, scope: str) -> SearchResponse:
+    def search(
+        self,
+        query: str,
+        limit: int,
+        scope: str,
+        location_filters: dict | None = None,
+        menu_filters: dict | None = None,
+        fuzzy: bool = True,
+        min_score: float = 0.0,
+    ) -> SearchResponse:
         return SearchResponse(
             query=query,
             results=[
@@ -296,6 +358,20 @@ def test_search_endpoint() -> None:
     assert response.json()["results"][0]["kind"] == "menu_item"
 
 
+def test_search_endpoint_supports_filters() -> None:
+    client = build_test_client()
+    response = client.get(
+        "/search",
+        params={
+            "query": "latte",
+            "menu_category": "Espresso",
+            "fuzzy": True,
+            "min_score": 1,
+        },
+    )
+    assert response.status_code == 200
+
+
 def test_location_orders_and_stats_endpoints() -> None:
     client = build_test_client()
     response = client.get("/locations/101/orders")
@@ -316,6 +392,18 @@ def test_menu_recommendations_endpoint() -> None:
     assert response.status_code == 200
 
 
+def test_menu_enrichment_endpoints() -> None:
+    client = build_test_client()
+    response = client.get("/menu/categories")
+    assert response.status_code == 200
+    response = client.get("/menu/sizes")
+    assert response.status_code == 200
+    response = client.get("/menu/latte/stats")
+    assert response.status_code == 200
+    response = client.get("/menu/latte/stats", params={"window_days": 30})
+    assert response.status_code == 200
+
+
 def test_stats_endpoints() -> None:
     client = build_test_client()
     response = client.get("/stats/orders")
@@ -323,4 +411,20 @@ def test_stats_endpoints() -> None:
     response = client.get("/stats/top-items")
     assert response.status_code == 200
     response = client.get("/stats/top-locations")
+    assert response.status_code == 200
+
+
+def test_member_recent_and_favorites_endpoints() -> None:
+    client = build_test_client()
+    response = client.get("/members/member-1/recent")
+    assert response.status_code == 200
+    response = client.get("/members/member-1/favorites")
+    assert response.status_code == 200
+    response = client.get("/members/member-1/favorites", params={"window_days": 30})
+    assert response.status_code == 200
+    response = client.get("/members/member-1/favorites/trends")
+    assert response.status_code == 200
+    response = client.get("/members/member-1/summary")
+    assert response.status_code == 200
+    response = client.get("/members/member-1/summary", params={"favorites_window_days": 30})
     assert response.status_code == 200

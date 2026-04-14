@@ -22,6 +22,14 @@ class MenuRecommendation(BaseModel):
     window_days: int | None = None
 
 
+class MenuItemStats(BaseModel):
+    item_id: str
+    total_orders: int
+    total_quantity: int
+    total_revenue: float
+    last_order_date: str | None = None
+
+
 class MenuQueryParams(BaseModel):
     category: str | None = Field(default=None)
     min_price: float | None = Field(default=None, ge=0)

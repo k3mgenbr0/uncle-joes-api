@@ -2,7 +2,7 @@ import logging
 
 from app.core.errors import NotFoundError
 from app.repositories.menu import MenuRepository
-from app.schemas.menu import MenuItem, MenuQueryParams
+from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,23 @@ class MenuService:
             raise NotFoundError(f"Menu item '{item_id}' was not found.")
         logger.info("Fetched menu item item_id=%s", item_id)
         return self._enrich(MenuItem.model_validate(row))
+
+    def list_categories(self) -> list[str]:
+        rows = self._repository.list_categories()
+        logger.info("Fetched menu categories count=%s", len(rows))
+        return rows
+
+    def list_sizes(self) -> list[str]:
+        rows = self._repository.list_sizes()
+        logger.info("Fetched menu sizes count=%s", len(rows))
+        return rows
+
+    def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> MenuItemStats:
+        if self._repository.get_menu_item(item_id) is None:
+            raise NotFoundError(f"Menu item '{item_id}' was not found.")
+        row = self._repository.get_menu_item_stats(item_id, window_days=window_days)
+        logger.info("Fetched menu item stats item_id=%s window_days=%s", item_id, window_days)
+        return MenuItemStats.model_validate(row)
 
     @staticmethod
     def _enrich(item: MenuItem) -> MenuItem:

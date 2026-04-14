@@ -57,6 +57,30 @@ Supports: `limit`, `offset`, `include_items`, `sort_by`, `sort_dir`.
 Returns loyalty points, calculated as the sum of `floor(order_total)` across orders.  
 Use case: rewards summary and points balance display.
 
+### `GET /members/{member_id}/recent`
+Returns a member’s most recent orders (defaults to the last 5).  
+Use case: “Recent activity” card on the account page.
+
+Supports: `include_items`, `limit`.
+
+### `GET /members/{member_id}/favorites`
+Returns a member’s most‑ordered menu items.  
+Use case: “Your favorites” section.
+
+Supports: `limit`, `window_days`.
+
+### `GET /members/{member_id}/favorites/trends`
+Returns weekly trends for a member’s top items in a recent window.  
+Use case: “Your favorites over time” chart.
+
+Supports: `window_days`, `limit_items`.
+
+### `GET /members/{member_id}/summary`
+Returns a combined payload: profile, points, recent orders, and favorites.  
+Use case: one request to hydrate the member dashboard.
+
+Supports: `include_items`, `recent_limit`, `favorites_limit`, `favorites_window_days`.
+
 ### `GET /locations/{location_id}/orders`
 Returns orders placed at a specific store.  
 Use case: store performance view and staff dashboards.
@@ -79,7 +103,10 @@ Use case: week‑over‑week trend chart.
 Searches locations and menu items using a single query string.  
 Use case: global search bar and “quick find.”
 
-Supports: `scope=all|locations|menu`, `limit`.
+Supports: `scope=all|locations|menu`, `limit`, `fuzzy`, `min_score`, plus optional filters for locations and menu items.
+
+Location filters: `location_state`, `location_city`, `location_open_for_business`, `location_wifi`, `location_drive_thru`, `location_door_dash`.  
+Menu filters: `menu_category`, `menu_size`, `menu_min_price`, `menu_max_price`.
 
 ### `GET /stats/orders`
 Returns overall order stats for the entire business.  
@@ -99,6 +126,20 @@ Use case: “popular items” and “seasonal favorites” sections.
 
 Supports: `kind=all_time|seasonal`, `window_days`, `limit`.
 
+### `GET /menu/categories`
+Returns the distinct list of menu categories.  
+Use case: menu filter dropdown.
+
+### `GET /menu/sizes`
+Returns the distinct list of menu sizes.  
+Use case: size filter chips.
+
+### `GET /menu/{item_id}/stats`
+Returns order stats for a single menu item (orders, quantity, revenue, last order date).  
+Use case: item detail insights.
+
+Supports: `window_days` for time‑bounded stats.
+
 ### `GET /docs`
 Interactive API documentation (Swagger UI).
 
@@ -110,7 +151,7 @@ Health checks for uptime and BigQuery connectivity.
 - Cloud Run ready
 - CORS enabled for frontend use
 - Swagger docs at `/docs`
-- Filtering, pagination, sorting, search
+- Filtering, pagination, sorting, fuzzy search
 - Store and global stats endpoints
 
 ## How to Run (Minimal)

@@ -162,6 +162,109 @@ class OrderRepository:
         ]
         return self._runner.fetch_all(query, params)
 
+    def list_member_favorites(
+        self,
+        member_id: str,
+        limit: int,
+        window_days: int | None = None,
+    ) -> list[dict]:
+        date_filter = ""
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
+        if window_days is not None:
+            date_filter = (
+                f"AND DATE(o.{self._order_date_column}) >= "
+                "DATE_SUB(CURRENT_DATE(), INTERVAL @window_days DAY)"
+            )
+            params.append(
+                bigquery.ScalarQueryParameter("window_days", "INT64", window_days)
+            )
+        query = f"""
+            SELECT
+                CAST(oi.{self._order_item_menu_item_id_column} AS STRING) AS menu_item_id,
+                CAST(oi.{self._order_item_name_column} AS STRING) AS item_name,
+                COUNT(DISTINCT CAST(oi.{self._order_item_order_id_column} AS STRING))
+                    AS total_orders,
+                COALESCE(
+                    SUM(SAFE_CAST(oi.{self._order_item_quantity_column} AS INT64)),
+                    0
+                ) AS total_quantity,
+                COALESCE(
+                    SUM(
+                        SAFE_CAST(oi.{self._order_item_quantity_column} AS FLOAT64)
+                        * SAFE_CAST(oi.{self._order_item_price_column} AS FLOAT64)
+                    ),
+                    0.0
+                ) AS total_revenue
+            FROM {self._order_items_table} AS oi
+            INNER JOIN {self._orders_table} AS o
+                ON CAST(oi.{self._order_item_order_id_column} AS STRING)
+                    = CAST(o.{self._order_id_column} AS STRING)
+            WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
+            {date_filter}
+            GROUP BY menu_item_id, item_name
+            ORDER BY total_quantity DESC, total_revenue DESC
+            LIMIT @limit
+        """
+        return self._runner.fetch_all(query, params)
+
+    def list_member_favorite_trends(
+        self,
+        member_id: str,
+        limit_items: int,
+        window_days: int,
+    ) -> list[dict]:
+        query = f"""
+            WITH member_items AS (
+                SELECT
+                    CAST(oi.{self._order_item_menu_item_id_column} AS STRING)
+                        AS menu_item_id,
+                    CAST(oi.{self._order_item_name_column} AS STRING) AS item_name,
+                    CAST(o.{self._order_id_column} AS STRING) AS order_id,
+                    DATE(o.{self._order_date_column}) AS order_date,
+                    SAFE_CAST(oi.{self._order_item_quantity_column} AS INT64) AS quantity,
+                    SAFE_CAST(oi.{self._order_item_price_column} AS FLOAT64) AS price
+                FROM {self._order_items_table} AS oi
+                INNER JOIN {self._orders_table} AS o
+                    ON CAST(oi.{self._order_item_order_id_column} AS STRING)
+                        = CAST(o.{self._order_id_column} AS STRING)
+                WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
+                  AND DATE(o.{self._order_date_column}) >= DATE_SUB(
+                        CURRENT_DATE(), INTERVAL @window_days DAY
+                  )
+            ),
+            top_items AS (
+                SELECT
+                    menu_item_id,
+                    item_name,
+                    SUM(quantity) AS total_quantity
+                FROM member_items
+                GROUP BY menu_item_id, item_name
+                ORDER BY total_quantity DESC
+                LIMIT @limit_items
+            )
+            SELECT
+                mi.menu_item_id,
+                mi.item_name,
+                CAST(DATE_TRUNC(mi.order_date, WEEK(MONDAY)) AS STRING) AS week_start,
+                COUNT(DISTINCT mi.order_id) AS total_orders,
+                COALESCE(SUM(mi.quantity), 0) AS total_quantity,
+                COALESCE(SUM(mi.quantity * mi.price), 0.0) AS total_revenue
+            FROM member_items AS mi
+            INNER JOIN top_items AS ti
+                ON mi.menu_item_id = ti.menu_item_id
+            GROUP BY menu_item_id, item_name, week_start
+            ORDER BY week_start DESC, total_quantity DESC
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("limit_items", "INT64", limit_items),
+            bigquery.ScalarQueryParameter("window_days", "INT64", window_days),
+        ]
+        return self._runner.fetch_all(query, params)
+
     def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
         sort_map = {
             "order_date": self._order_date_column,
