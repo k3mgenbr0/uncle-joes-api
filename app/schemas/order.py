@@ -36,3 +36,16 @@ class OrderQueryParams(BaseModel):
     include_items: bool = False
     sort_by: str | None = None
     sort_dir: str = "desc"
+
+
+class DashboardOrder(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    order_id: str
+    store_id: str | None = None
+    store_city: str | None = None
+    store_state: str | None = None
+    order_date: datetime | None = None
+    order_total: float | None = None
+    points_earned: int | None = None
+    items: list[OrderItem] = Field(default_factory=list)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.schemas.order import Order
+from app.schemas.order import DashboardOrder, Order
 
 
 class Member(BaseModel):
@@ -48,3 +48,10 @@ class MemberSummary(BaseModel):
     points: MemberPoints
     recent_orders: list[Order]
     favorites: list[MemberFavoriteItem]
+
+
+class MemberDashboard(BaseModel):
+    member: Member
+    points: MemberPoints
+    orders: list[DashboardOrder]
+    pagination: dict | None = None

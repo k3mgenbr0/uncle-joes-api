@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_member_service, get_order_service
+from app.api.dependencies import get_current_member, get_member_service, get_order_service
+from app.core.errors import UnauthorizedError
 from app.schemas.common import ErrorResponse
 from app.schemas.member import (
     Member,
@@ -27,8 +28,11 @@ router = APIRouter(prefix="/members", tags=["members"])
 )
 def get_member(
     member_id: str,
+    current_member: Member = Depends(get_current_member),
     service: MemberService = Depends(get_member_service),
 ) -> Member:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     return service.get_member(member_id)
 
 
@@ -45,9 +49,12 @@ def get_member_orders(
     sort_dir: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> list[Order]:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
     params = OrderQueryParams(
         limit=limit,
@@ -67,9 +74,12 @@ def get_member_orders(
 )
 def get_member_points(
     member_id: str,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> MemberPoints:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
     points = order_service.calculate_points(member_id)
     return member_service.get_points(member_id, points)
@@ -85,9 +95,12 @@ def get_member_recent_orders(
     member_id: str,
     include_items: Annotated[bool, Query()] = True,
     limit: Annotated[int, Query(ge=1, le=25)] = 5,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> list[Order]:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
     params = OrderQueryParams(
         limit=limit,
@@ -109,9 +122,12 @@ def get_member_favorites(
     member_id: str,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> list[MemberFavoriteItem]:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
     return order_service.list_member_favorites(member_id, limit, window_days=window_days)
 
@@ -126,9 +142,12 @@ def get_member_favorite_trends(
     member_id: str,
     window_days: Annotated[int, Query(ge=7, le=365)] = 90,
     limit_items: Annotated[int, Query(ge=1, le=10)] = 5,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> list[MemberFavoriteTrendPoint]:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
     return order_service.list_member_favorite_trends(
         member_id,
@@ -149,9 +168,12 @@ def get_member_summary(
     recent_limit: Annotated[int, Query(ge=1, le=25)] = 5,
     favorites_limit: Annotated[int, Query(ge=1, le=50)] = 10,
     favorites_window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
 ) -> MemberSummary:
+    if current_member.member_id != member_id:
+        raise UnauthorizedError("Access denied.")
     member = member_service.get_member(member_id)
     points = member_service.get_points(member_id, order_service.calculate_points(member_id))
     recent_params = OrderQueryParams(

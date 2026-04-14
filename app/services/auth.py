@@ -9,7 +9,7 @@ class AuthService:
     def __init__(self, repository: MemberRepository) -> None:
         self._repository = repository
 
-    def login(self, email: str, password: str) -> LoginResponse:
+    def authenticate(self, email: str, password: str) -> dict:
         member = self._repository.get_member_by_email(email)
         if member is None:
             raise UnauthorizedError("Invalid email or password.")
@@ -26,10 +26,13 @@ class AuthService:
         ):
             raise UnauthorizedError("Invalid email or password.")
 
+        return member
+
+    def login(self, email: str, password: str) -> LoginResponse:
+        member = self.authenticate(email, password)
         full_name = " ".join(
             part for part in [member.get("first_name"), member.get("last_name")] if part
         )
-
         return LoginResponse(
             authenticated=True,
             member_id=member["member_id"],

@@ -1,9 +1,11 @@
 from collections.abc import Iterator
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from google.cloud import bigquery
 
+from app.core.auth import decode_session_token
 from app.core.config import Settings, get_settings
+from app.core.errors import UnauthorizedError
 from app.db.bigquery import BigQueryRunner
 from app.repositories.locations import LocationRepository
 from app.repositories.members import MemberRepository
@@ -14,6 +16,7 @@ from app.repositories.stats import StatsRepository
 from app.services.auth import AuthService
 from app.services.locations import LocationService
 from app.services.members import MemberService
+from app.schemas.member import Member
 from app.services.menu import MenuService
 from app.services.orders import OrderService
 from app.services.recommendations import RecommendationsService
@@ -107,6 +110,21 @@ def get_auth_service(
     repository: MemberRepository = Depends(get_member_repository),
 ) -> AuthService:
     return AuthService(repository)
+
+
+def get_current_member(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    member_service: MemberService = Depends(get_member_service),
+) -> Member:
+    token = request.cookies.get(settings.auth_cookie_name)
+    payload = decode_session_token(token, settings.auth_secret_key) if token else None
+    if not payload:
+        raise UnauthorizedError("Authentication required.")
+    member_id = payload.get("member_id")
+    if not member_id:
+        raise UnauthorizedError("Authentication required.")
+    return member_service.get_member(str(member_id))
 
 
 def get_search_service(

@@ -9,6 +9,7 @@ class OrderRepository:
         self._runner = runner
         self._orders_table = quote_table(settings.resolved_orders_table)
         self._order_items_table = quote_table(settings.resolved_order_items_table)
+        self._locations_table = quote_table(settings.resolved_locations_table)
 
         self._order_id_column = quote_column(settings.order_id_column)
         self._order_member_id_column = quote_column(settings.order_member_id_column)
@@ -29,6 +30,9 @@ class OrderRepository:
         self._order_item_size_column = quote_column(settings.order_item_size_column)
         self._order_item_quantity_column = quote_column(settings.order_item_quantity_column)
         self._order_item_price_column = quote_column(settings.order_item_price_column)
+        self._location_id_column = quote_column(settings.location_id_column)
+        self._location_city_column = quote_column(settings.location_city_column)
+        self._location_state_column = quote_column(settings.location_state_column)
 
     def list_orders_for_member(
         self,
@@ -86,6 +90,45 @@ class OrderRepository:
             bigquery.ArrayQueryParameter("order_ids", "STRING", order_ids),
         ]
         return self._runner.fetch_all(query, params)
+
+    def list_member_orders_with_location(
+        self,
+        member_id: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        query = f"""
+            SELECT
+                CAST(o.{self._order_id_column} AS STRING) AS order_id,
+                CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
+                CAST(l.{self._location_city_column} AS STRING) AS store_city,
+                CAST(l.{self._location_state_column} AS STRING) AS store_state,
+                o.{self._order_date_column} AS order_date,
+                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS order_total
+            FROM {self._orders_table} AS o
+            LEFT JOIN {self._locations_table} AS l
+                ON CAST(o.{self._order_store_id_column} AS STRING)
+                    = CAST(l.{self._location_id_column} AS STRING)
+            WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
+            ORDER BY o.{self._order_date_column} DESC
+            LIMIT @limit OFFSET @offset
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+            bigquery.ScalarQueryParameter("offset", "INT64", offset),
+        ]
+        return self._runner.fetch_all(query, params)
+
+    def count_member_orders(self, member_id: str) -> int:
+        query = f"""
+            SELECT COUNT(1) AS total_orders
+            FROM {self._orders_table}
+            WHERE CAST({self._order_member_id_column} AS STRING) = @member_id
+        """
+        params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
+        row = self._runner.fetch_one(query, params) or {"total_orders": 0}
+        return int(row["total_orders"] or 0)
 
     def get_member_points(self, member_id: str) -> int:
         query = f"""

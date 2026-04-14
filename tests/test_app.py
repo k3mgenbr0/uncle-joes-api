@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import (
     get_auth_service,
+    get_current_member,
     get_location_service,
     get_member_service,
     get_menu_service,
@@ -108,7 +109,7 @@ class StubMenuService:
 
 
 class StubAuthService:
-    def login(self, email: str, password: str) -> LoginResponse:
+    def authenticate(self, email: str, password: str) -> dict:
         submitted_bytes = password.encode("utf-8")
         stored_hash = bcrypt.hashpw(b"Coffee123!", bcrypt.gensalt()).decode("utf-8")
         if email != "member@example.com" or not bcrypt.checkpw(
@@ -116,6 +117,15 @@ class StubAuthService:
             stored_hash.encode("utf-8"),
         ):
             raise ValueError("Invalid credentials for stub.")
+        return {
+            "member_id": "member-1",
+            "first_name": "Joe",
+            "last_name": "Smith",
+            "email": "member@example.com",
+        }
+
+    def login(self, email: str, password: str) -> LoginResponse:
+        self.authenticate(email, password)
         return LoginResponse(
             authenticated=True,
             member_id="member-1",
@@ -190,6 +200,25 @@ class StubOrderService:
                 "total_revenue": 40.0,
             }
         ]
+
+    def list_member_dashboard_orders(
+        self,
+        member_id: str,
+        limit: int,
+        offset: int,
+        include_items: bool,
+    ) -> list[Order]:
+        return [
+            Order(
+                order_id="order-3",
+                member_id=member_id,
+                store_id="101",
+                order_total=9.75,
+            )
+        ]
+
+    def count_member_orders(self, member_id: str) -> int:
+        return 1
 
     def list_member_favorites(
         self,
@@ -295,6 +324,12 @@ def build_test_client() -> TestClient:
     app.dependency_overrides[get_search_service] = lambda: StubSearchService()
     app.dependency_overrides[get_stats_service] = lambda: StubStatsService()
     app.dependency_overrides[get_recommendations_service] = lambda: StubRecommendationsService()
+    app.dependency_overrides[get_current_member] = lambda: Member(
+        member_id="member-1",
+        first_name="Joe",
+        last_name="Smith",
+        email="member@example.com",
+    )
     return TestClient(app)
 
 
@@ -427,4 +462,22 @@ def test_member_recent_and_favorites_endpoints() -> None:
     response = client.get("/members/member-1/summary")
     assert response.status_code == 200
     response = client.get("/members/member-1/summary", params={"favorites_window_days": 30})
+    assert response.status_code == 200
+
+
+def test_member_auth_session_endpoints() -> None:
+    client = build_test_client()
+    response = client.post(
+        "/api/member/login",
+        json={"email": "member@example.com", "password": "Coffee123!"},
+    )
+    assert response.status_code == 200
+    response = client.get("/api/member/session")
+    assert response.status_code == 200
+    response = client.get("/api/member/dashboard")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "pagination" in payload
+    assert payload["orders"][0]["points_earned"] >= 0
+    response = client.post("/api/member/logout")
     assert response.status_code == 200

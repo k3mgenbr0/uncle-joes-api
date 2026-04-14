@@ -43,6 +43,28 @@ Behavior notes:
 - Compares the submitted password against the bcrypt hash stored in BigQuery.
 - Returns a small profile summary on success.
 
+### `POST /api/member/login`
+Starts a member session and sets a secure, HTTP‑only cookie.  
+Use case: login for the member dashboard.
+
+### `POST /api/member/logout`
+Clears the member session cookie.  
+Use case: log out of the dashboard.
+
+### `GET /api/member/session`
+Returns the currently authenticated member.  
+Use case: keep the UI in sync with login state.
+
+### `GET /api/member/dashboard`
+Returns member profile, points balance, and orders with store info and line items.  
+Use case: primary dashboard data fetch.
+
+Supports: `include_items`, `limit`, `offset`.
+
+Dashboard response also includes:
+- `pagination` (limit/offset/total)
+- `points_earned` per order
+
 ### `GET /members/{member_id}`
 Returns a member profile (name, email, home store, etc.).  
 Use case: account/profile page.
@@ -150,6 +172,7 @@ Health checks for uptime and BigQuery connectivity.
 - BigQuery integration (real data, no mocks)
 - Cloud Run ready
 - CORS enabled for frontend use
+- Cookie-based member sessions
 - Swagger docs at `/docs`
 - Filtering, pagination, sorting, fuzzy search
 - Store and global stats endpoints
@@ -162,3 +185,4 @@ Health checks for uptime and BigQuery connectivity.
 - Base URL: `http://127.0.0.1:8000`
 - Open docs: `http://127.0.0.1:8000/docs`
 - A frontend should call the endpoints above to fetch data for pages, search, and dashboards.
+- Member endpoints under `/api/member` set and read an HTTP‑only session cookie.

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     )
     log_level: str = "INFO"
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    auth_secret_key: str = Field(default="dev-secret", alias="AUTH_SECRET_KEY")
+    auth_cookie_name: str = Field(default="ucc_session", alias="AUTH_COOKIE_NAME")
+    auth_cookie_ttl_minutes: int = Field(default=480, alias="AUTH_COOKIE_TTL_MINUTES")
+    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
 
     google_cloud_project: str | None = Field(default="mgmt545proj", alias="GOOGLE_CLOUD_PROJECT")
     bq_project_id: str | None = Field(default="mgmt545proj", alias="BQ_PROJECT_ID")

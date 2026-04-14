@@ -2,7 +2,7 @@ import logging
 
 from app.repositories.orders import OrderRepository
 from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint
-from app.schemas.order import Order, OrderItem, OrderQueryParams
+from app.schemas.order import DashboardOrder, Order, OrderItem, OrderQueryParams
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,42 @@ class OrderService:
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
         return orders
+
+    def list_member_dashboard_orders(
+        self,
+        member_id: str,
+        limit: int,
+        offset: int,
+        include_items: bool,
+    ) -> list[DashboardOrder]:
+        rows = self._repository.list_member_orders_with_location(
+            member_id=member_id,
+            limit=limit,
+            offset=offset,
+        )
+        orders = [DashboardOrder.model_validate(row) for row in rows]
+        if include_items:
+            order_ids = [order.order_id for order in orders]
+            items_rows = self._repository.list_order_items(order_ids)
+            items_by_order: dict[str, list[OrderItem]] = {}
+            for item_row in items_rows:
+                order_id = item_row.get("order_id")
+                if order_id is None:
+                    continue
+                items_by_order.setdefault(order_id, []).append(
+                    OrderItem.model_validate(item_row)
+                )
+            for order in orders:
+                order.items = items_by_order.get(order.order_id, [])
+        for order in orders:
+            if order.order_total is None:
+                order.points_earned = 0
+            else:
+                order.points_earned = int(order.order_total // 1)
+        return orders
+
+    def count_member_orders(self, member_id: str) -> int:
+        return self._repository.count_member_orders(member_id)
 
     def calculate_location_stats(self, store_id: str) -> dict:
         return self._repository.get_location_stats(store_id)
