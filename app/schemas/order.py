@@ -13,6 +13,8 @@ class OrderItem(BaseModel):
     size: str | None = None
     quantity: int | None = None
     price: float | None = None
+    unit_price: float | None = None
+    line_total: float | None = None
 
 
 class Order(BaseModel):
@@ -49,3 +51,30 @@ class DashboardOrder(BaseModel):
     order_total: float | None = None
     points_earned: int | None = None
     items: list[OrderItem] = Field(default_factory=list)
+
+
+class PaymentSummary(BaseModel):
+    subtotal: float | None = None
+    discount: float | None = None
+    tax: float | None = None
+    total: float | None = None
+
+
+class OrderDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    order_id: str
+    member_id: str | None = None
+    store_id: str | None = None
+    store_name: str | None = None
+    store_city: str | None = None
+    store_state: str | None = None
+    order_date: datetime | None = None
+    subtotal: float | None = None
+    discount: float | None = None
+    tax: float | None = None
+    total: float | None = None
+    points_earned: int | None = None
+    points_redeemed: int | None = None
+    items: list[OrderItem] = Field(default_factory=list)
+    payment_summary: PaymentSummary | None = None

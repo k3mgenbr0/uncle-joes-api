@@ -21,6 +21,8 @@ Supports: `state`, `city`, `open_for_business`, `wifi`, `drive_thru`, `door_dash
 Returns one location by ID.  
 Use case: store detail page.
 
+Includes address, coordinates, hours, `hours_today`, `open_now`, service flags, and derived store detail fields.
+
 ### `GET /menu`
 Lists menu items.  
 Use case: menu page with filters and sorting.
@@ -30,6 +32,8 @@ Supports: `category`, `min_price`, `max_price`, `sort_by`, `sort_dir`, `limit`, 
 ### `GET /menu/{item_id}`
 Returns one menu item by ID.  
 Use case: menu item detail view.
+
+Includes detail-friendly fields such as tags, availability status, nullable media/description fields, and related items.
 
 ## API Endpoints (Expanded)
 
@@ -54,6 +58,10 @@ Use case: log out of the dashboard.
 ### `GET /api/member/session`
 Returns the currently authenticated member.  
 Use case: keep the UI in sync with login state.
+
+### `GET /api/member/profile`
+Returns the authenticated member profile with derived rewards and preferred-store data.  
+Use case: account settings and profile screen.
 
 ### `GET /api/member/dashboard`
 Returns member profile, points balance, and orders with store info and line items.  
@@ -161,6 +169,10 @@ Returns order stats for a single menu item (orders, quantity, revenue, last orde
 Use case: item detail insights.
 
 Supports: `window_days` for time‑bounded stats.
+
+### `GET /orders/{order_id}`
+Returns a full order detail payload for the authenticated member.  
+Use case: dedicated order detail page.
 
 ### `GET /docs`
 Interactive API documentation (Swagger UI).

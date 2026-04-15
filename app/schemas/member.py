@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.schemas.location import LocationSummary
 from app.schemas.order import DashboardOrder, Order
 
 
@@ -14,6 +15,14 @@ class Member(BaseModel):
     email: EmailStr | None = None
     phone_number: str | None = None
     home_store: str | None = None
+    rewards_tier: str | None = None
+    points_to_next_reward: int | None = None
+    preferred_store_id: str | None = None
+    preferred_store: LocationSummary | None = None
+    join_date: str | None = None
+    birthday_month_day: str | None = None
+    marketing_opt_in: bool | None = None
+    profile_photo_url: str | None = None
 
 
 class MemberQueryParams(BaseModel):

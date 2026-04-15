@@ -1,6 +1,14 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class RelatedMenuItem(BaseModel):
+    item_id: str
+    name: str
+    category: str | None = None
+    size: str | None = None
+    price: float | None = None
+
+
 class MenuItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -11,6 +19,16 @@ class MenuItem(BaseModel):
     calories: int | None = None
     price: float
     price_display: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    ingredients: list[str] = Field(default_factory=list)
+    allergens: list[str] = Field(default_factory=list)
+    caffeine_mg: int | None = None
+    availability_status: str | None = None
+    seasonal: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    customization_options: list[str] = Field(default_factory=list)
+    related_items: list[RelatedMenuItem] = Field(default_factory=list)
 
 
 class MenuRecommendation(BaseModel):

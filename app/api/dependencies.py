@@ -96,8 +96,10 @@ def get_menu_service(
 
 def get_member_service(
     repository: MemberRepository = Depends(get_member_repository),
+    order_repository: OrderRepository = Depends(get_order_repository),
+    location_repository: LocationRepository = Depends(get_location_repository),
 ) -> MemberService:
-    return MemberService(repository)
+    return MemberService(repository, order_repository, location_repository)
 
 
 def get_order_service(

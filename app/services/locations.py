@@ -36,6 +36,11 @@ class LocationService:
         location.full_address = self._build_full_address(location)
         location.hours_today = self._today_hours(location)
         location.open_now = self._is_open_now(location.hours_today)
+        location.store_name = f"Uncle Joe's {location.city}" if location.city else None
+        location.services = self._services(location)
+        location.holiday_hours = []
+        location.pickup_supported = self._pickup_supported(location)
+        location.dine_in_supported = None
         return location
 
     @staticmethod
@@ -77,3 +82,22 @@ class LocationService:
         if open_time <= close_time:
             return open_time <= now <= close_time
         return now >= open_time or now <= close_time
+
+    @staticmethod
+    def _services(location: Location) -> list[str]:
+        services: list[str] = []
+        if location.wifi:
+            services.append("wifi")
+        if location.drive_thru:
+            services.append("drive_thru")
+        if location.door_dash:
+            services.append("door_dash")
+        if location.open_for_business:
+            services.append("in_store")
+        return services
+
+    @staticmethod
+    def _pickup_supported(location: Location) -> bool | None:
+        if location.open_for_business is None and location.drive_thru is None and location.door_dash is None:
+            return None
+        return bool(location.open_for_business or location.drive_thru or location.door_dash)

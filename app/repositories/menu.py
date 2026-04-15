@@ -115,6 +115,35 @@ class MenuRepository:
         rows = self._runner.fetch_all(query, [])
         return [row["size"] for row in rows if row.get("size")]
 
+    def list_related_items(
+        self,
+        *,
+        item_id: str,
+        category: str | None,
+        limit: int = 4,
+    ) -> list[dict]:
+        if not category:
+            return []
+        query = f"""
+            SELECT
+                CAST({self._id_column} AS STRING) AS item_id,
+                CAST({self._name_column} AS STRING) AS name,
+                CAST({self._category_column} AS STRING) AS category,
+                CAST({self._size_column} AS STRING) AS size,
+                COALESCE(SAFE_CAST({self._price_column} AS FLOAT64), 0.0) AS price
+            FROM {self._table}
+            WHERE LOWER(CAST({self._category_column} AS STRING)) = LOWER(@category)
+              AND CAST({self._id_column} AS STRING) != @item_id
+            ORDER BY {self._name_column}, {self._size_column}
+            LIMIT @limit
+        """
+        params = [
+            bigquery.ScalarQueryParameter("category", "STRING", category),
+            bigquery.ScalarQueryParameter("item_id", "STRING", item_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
+        return self._runner.fetch_all(query, params)
+
     def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> dict:
         date_filter = ""
         params = [bigquery.ScalarQueryParameter("item_id", "STRING", item_id)]

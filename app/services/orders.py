@@ -1,8 +1,9 @@
 import logging
 
+from app.core.errors import NotFoundError
 from app.repositories.orders import OrderRepository
 from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint
-from app.schemas.order import DashboardOrder, Order, OrderItem, OrderQueryParams
+from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderItem, OrderQueryParams, PaymentSummary
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class OrderService:
                 if order_id is None:
                     continue
                 items_by_order.setdefault(order_id, []).append(
-                    OrderItem.model_validate(item_row)
+                    self._enrich_order_item(OrderItem.model_validate(item_row))
                 )
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
@@ -67,7 +68,7 @@ class OrderService:
                 if order_id is None:
                     continue
                 items_by_order.setdefault(order_id, []).append(
-                    OrderItem.model_validate(item_row)
+                    self._enrich_order_item(OrderItem.model_validate(item_row))
                 )
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
@@ -95,7 +96,7 @@ class OrderService:
                 if order_id is None:
                     continue
                 items_by_order.setdefault(order_id, []).append(
-                    OrderItem.model_validate(item_row)
+                    self._enrich_order_item(OrderItem.model_validate(item_row))
                 )
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
@@ -108,6 +109,27 @@ class OrderService:
 
     def count_member_orders(self, member_id: str) -> int:
         return self._repository.count_member_orders(member_id)
+
+    def get_order_detail(self, order_id: str) -> OrderDetail:
+        row = self._repository.get_order_detail(order_id)
+        if row is None:
+            raise NotFoundError(f"Order '{order_id}' was not found.")
+        detail = OrderDetail.model_validate(row)
+        item_rows = self._repository.list_order_items([order_id])
+        detail.items = [
+            self._enrich_order_item(OrderItem.model_validate(item_row))
+            for item_row in item_rows
+        ]
+        detail.points_earned = int(detail.total // 1) if detail.total is not None else 0
+        detail.points_redeemed = None
+        detail.store_name = f"Uncle Joe's {detail.store_city}" if detail.store_city else None
+        detail.payment_summary = PaymentSummary(
+            subtotal=detail.subtotal,
+            discount=detail.discount,
+            tax=detail.tax,
+            total=detail.total,
+        )
+        return detail
 
     def calculate_location_stats(self, store_id: str) -> dict:
         return self._repository.get_location_stats(store_id)
@@ -143,3 +165,12 @@ class OrderService:
             window_days,
         )
         return [MemberFavoriteTrendPoint.model_validate(row) for row in rows]
+
+    @staticmethod
+    def _enrich_order_item(item: OrderItem) -> OrderItem:
+        item.unit_price = item.price
+        if item.price is not None and item.quantity is not None:
+            item.line_total = round(item.price * item.quantity, 2)
+        else:
+            item.line_total = None
+        return item

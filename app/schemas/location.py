@@ -6,6 +6,13 @@ class LocationHoursDay(BaseModel):
     close: str | None = None
 
 
+class HolidayHours(BaseModel):
+    date: str
+    open: str | None = None
+    close: str | None = None
+    note: str | None = None
+
+
 class LocationHours(BaseModel):
     monday: LocationHoursDay = Field(default_factory=LocationHoursDay)
     tuesday: LocationHoursDay = Field(default_factory=LocationHoursDay)
@@ -40,6 +47,20 @@ class Location(BaseModel):
     full_address: str | None = None
     hours_today: LocationHoursDay | None = None
     open_now: bool | None = None
+    store_name: str | None = None
+    services: list[str] = Field(default_factory=list)
+    holiday_hours: list[HolidayHours] = Field(default_factory=list)
+    pickup_supported: bool | None = None
+    dine_in_supported: bool | None = None
+
+
+class LocationSummary(BaseModel):
+    location_id: str
+    store_name: str | None = None
+    city: str | None = None
+    state: str | None = None
+    full_address: str | None = None
+    phone: str | None = None
 
 
 class LocationQueryParams(BaseModel):

@@ -22,7 +22,7 @@ from app.schemas.member import (
     MemberPoints,
 )
 from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
-from app.schemas.order import Order, OrderQueryParams
+from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderQueryParams
 from app.schemas.search import SearchResponse, SearchResult
 from app.schemas.stats import OrderStats, TopLocation, TopMenuItem
 
@@ -46,6 +46,10 @@ class StubLocationService:
                 wifi=True,
                 drive_thru=False,
                 door_dash=True,
+                full_address="123 Main St, Indianapolis, IN, 46204",
+                store_name="Uncle Joe's Indianapolis",
+                services=["wifi", "door_dash", "in_store"],
+                pickup_supported=True,
             )
         ]
 
@@ -66,6 +70,12 @@ class StubLocationService:
             wifi=True,
             drive_thru=False,
             door_dash=True,
+            full_address="123 Main St, Indianapolis, IN, 46204",
+            hours_today={"open": "07:00", "close": "20:00"},
+            open_now=True,
+            store_name="Uncle Joe's Indianapolis",
+            services=["wifi", "door_dash", "in_store"],
+            pickup_supported=True,
         )
 
 
@@ -90,6 +100,12 @@ class StubMenuService:
             size="Medium",
             calories=190,
             price=4.5,
+            ingredients=[],
+            allergens=[],
+            tags=["espresso", "medium", "under-200-calories"],
+            customization_options=[],
+            related_items=[],
+            availability_status="available",
         )
 
     def list_categories(self) -> list[str]:
@@ -207,18 +223,39 @@ class StubOrderService:
         limit: int,
         offset: int,
         include_items: bool,
-    ) -> list[Order]:
+    ) -> list[DashboardOrder]:
         return [
-            Order(
+            DashboardOrder(
                 order_id="order-3",
-                member_id=member_id,
                 store_id="101",
+                store_city="Indianapolis",
+                store_state="IN",
                 order_total=9.75,
+                points_earned=9,
+                items=[],
             )
         ]
 
     def count_member_orders(self, member_id: str) -> int:
         return 1
+
+    def get_order_detail(self, order_id: str) -> OrderDetail:
+        return OrderDetail(
+            order_id=order_id,
+            member_id="member-1",
+            store_id="101",
+            store_name="Uncle Joe's Indianapolis",
+            store_city="Indianapolis",
+            store_state="IN",
+            subtotal=10.0,
+            discount=0.0,
+            tax=0.8,
+            total=10.8,
+            points_earned=10,
+            points_redeemed=None,
+            items=[],
+            payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8},
+        )
 
     def list_member_favorites(
         self,
@@ -353,6 +390,7 @@ def test_get_menu_item() -> None:
     response = client.get("/menu/latte")
     assert response.status_code == 200
     assert response.json()["item_id"] == "latte"
+    assert "related_items" in response.json()
 
 
 def test_login_endpoint() -> None:
@@ -370,6 +408,7 @@ def test_member_profile_endpoint() -> None:
     response = client.get("/members/member-1")
     assert response.status_code == 200
     assert response.json()["member_id"] == "member-1"
+    assert "rewards_tier" in response.json()
 
 
 def test_member_orders_endpoint() -> None:
@@ -409,6 +448,9 @@ def test_search_endpoint_supports_filters() -> None:
 
 def test_location_orders_and_stats_endpoints() -> None:
     client = build_test_client()
+    response = client.get("/locations/101")
+    assert response.status_code == 200
+    assert "store_name" in response.json()
     response = client.get("/locations/101/orders")
     assert response.status_code == 200
     assert response.json()[0]["order_id"] == "order-2"
@@ -474,6 +516,8 @@ def test_member_auth_session_endpoints() -> None:
     assert response.status_code == 200
     response = client.get("/api/member/session")
     assert response.status_code == 200
+    response = client.get("/api/member/profile")
+    assert response.status_code == 200
     response = client.get("/api/member/dashboard")
     assert response.status_code == 200
     payload = response.json()
@@ -481,3 +525,12 @@ def test_member_auth_session_endpoints() -> None:
     assert payload["orders"][0]["points_earned"] >= 0
     response = client.post("/api/member/logout")
     assert response.status_code == 200
+
+
+def test_order_detail_endpoint() -> None:
+    client = build_test_client()
+    response = client.get("/orders/order-1")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["order_id"] == "order-1"
+    assert isinstance(payload["items"], list)

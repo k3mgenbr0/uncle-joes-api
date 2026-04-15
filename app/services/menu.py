@@ -2,7 +2,7 @@ import logging
 
 from app.core.errors import NotFoundError
 from app.repositories.menu import MenuRepository
-from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
+from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams, RelatedMenuItem
 
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,15 @@ class MenuService:
         row = self._repository.get_menu_item(item_id)
         if row is None:
             raise NotFoundError(f"Menu item '{item_id}' was not found.")
+        related_rows = self._repository.list_related_items(
+            item_id=item_id,
+            category=row.get("category"),
+        )
         logger.info("Fetched menu item item_id=%s", item_id)
-        return self._enrich(MenuItem.model_validate(row))
+        return self._enrich(
+            MenuItem.model_validate(row),
+            related_items=[RelatedMenuItem.model_validate(item) for item in related_rows],
+        )
 
     def list_categories(self) -> list[str]:
         rows = self._repository.list_categories()
@@ -48,6 +55,24 @@ class MenuService:
         return MenuItemStats.model_validate(row)
 
     @staticmethod
-    def _enrich(item: MenuItem) -> MenuItem:
+    def _enrich(item: MenuItem, related_items: list[RelatedMenuItem] | None = None) -> MenuItem:
         item.price_display = f"${item.price:,.2f}"
+        item.description = None
+        item.image_url = None
+        item.ingredients = []
+        item.allergens = []
+        item.caffeine_mg = None
+        item.availability_status = "available"
+        item.seasonal = None
+        item.tags = [
+            value
+            for value in [
+                item.category.lower() if item.category else None,
+                item.size.lower() if item.size else None,
+                "under-200-calories" if item.calories is not None and item.calories < 200 else None,
+            ]
+            if value
+        ]
+        item.customization_options = []
+        item.related_items = related_items or []
         return item

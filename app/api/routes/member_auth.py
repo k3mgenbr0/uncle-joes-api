@@ -81,6 +81,19 @@ def member_session(
 
 
 @router.get(
+    "/profile",
+    response_model=Member,
+    responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get the authenticated member profile",
+)
+def member_profile(
+    current_member: Member = Depends(get_current_member),
+    member_service: MemberService = Depends(get_member_service),
+) -> Member:
+    return member_service.get_member(current_member.member_id)
+
+
+@router.get(
     "/dashboard",
     response_model=MemberDashboard,
     responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},

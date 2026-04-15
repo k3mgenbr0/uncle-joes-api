@@ -144,6 +144,16 @@ class OrderRepository:
         row = self._runner.fetch_one(query, params) or {"total_points": 0}
         return int(row["total_points"] or 0)
 
+    def get_member_first_order_date(self, member_id: str) -> str | None:
+        query = f"""
+            SELECT CAST(MIN(DATE({self._order_date_column})) AS STRING) AS join_date
+            FROM {self._orders_table}
+            WHERE CAST({self._order_member_id_column} AS STRING) = @member_id
+        """
+        params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
+        row = self._runner.fetch_one(query, params) or {}
+        return row.get("join_date")
+
     def get_location_stats(self, store_id: str) -> dict:
         query = f"""
             SELECT
@@ -307,6 +317,29 @@ class OrderRepository:
             bigquery.ScalarQueryParameter("window_days", "INT64", window_days),
         ]
         return self._runner.fetch_all(query, params)
+
+    def get_order_detail(self, order_id: str) -> dict | None:
+        query = f"""
+            SELECT
+                CAST(o.{self._order_id_column} AS STRING) AS order_id,
+                CAST(o.{self._order_member_id_column} AS STRING) AS member_id,
+                CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
+                CAST(l.{self._location_city_column} AS STRING) AS store_city,
+                CAST(l.{self._location_state_column} AS STRING) AS store_state,
+                o.{self._order_date_column} AS order_date,
+                SAFE_CAST(o.{self._items_subtotal_column} AS FLOAT64) AS subtotal,
+                SAFE_CAST(o.{self._order_discount_column} AS FLOAT64) AS discount,
+                SAFE_CAST(o.{self._sales_tax_column} AS FLOAT64) AS tax,
+                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS total
+            FROM {self._orders_table} AS o
+            LEFT JOIN {self._locations_table} AS l
+                ON CAST(o.{self._order_store_id_column} AS STRING)
+                    = CAST(l.{self._location_id_column} AS STRING)
+            WHERE CAST(o.{self._order_id_column} AS STRING) = @order_id
+            LIMIT 1
+        """
+        params = [bigquery.ScalarQueryParameter("order_id", "STRING", order_id)]
+        return self._runner.fetch_one(query, params)
 
     def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
         sort_map = {
