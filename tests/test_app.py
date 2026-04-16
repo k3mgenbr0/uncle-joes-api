@@ -381,12 +381,53 @@ def test_cors_preflight_for_frontend_origin() -> None:
     response = client.options(
         "/menu",
         headers={
+            "Origin": "https://uncle-joes-frontend-129124698283.us-central1.run.app",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "https://uncle-joes-frontend-129124698283.us-central1.run.app"
+    )
+
+
+def test_cors_preflight_for_local_dev_origin() -> None:
+    client = build_test_client()
+    response = client.options(
+        "/locations",
+        headers={
             "Origin": "http://localhost:5173",
             "Access-Control-Request-Method": "GET",
         },
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_cors_preflight_for_authenticated_routes() -> None:
+    client = build_test_client()
+    for path in [
+        "/api/member/login",
+        "/api/member/logout",
+        "/api/member/session",
+        "/api/member/profile",
+        "/api/member/dashboard",
+        "/orders/order-1",
+    ]:
+        response = client.options(
+            path,
+            headers={
+                "Origin": "https://uncle-joes-frontend-129124698283.us-central1.run.app",
+                "Access-Control-Request-Method": "POST" if path.endswith("login") or path.endswith("logout") else "GET",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert response.status_code == 200
+        assert (
+            response.headers["access-control-allow-origin"]
+            == "https://uncle-joes-frontend-129124698283.us-central1.run.app"
+        )
 
 
 def test_list_locations_supports_filters() -> None:

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_allow_origins: list[str] = Field(
         default_factory=lambda: [
+            "https://uncle-joes-frontend-129124698283.us-central1.run.app",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:5173",
