@@ -376,6 +376,19 @@ def test_docs_endpoint_available() -> None:
     assert response.status_code == 200
 
 
+def test_cors_preflight_for_frontend_origin() -> None:
+    client = build_test_client()
+    response = client.options(
+        "/menu",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
 def test_list_locations_supports_filters() -> None:
     client = build_test_client()
     response = client.get("/locations", params={"state": "IN", "city": "Indianapolis"})

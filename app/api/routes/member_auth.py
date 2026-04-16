@@ -50,6 +50,7 @@ def member_login(
         httponly=True,
         secure=settings.auth_cookie_secure,
         samesite=settings.auth_cookie_samesite,
+        path="/",
     )
     return SessionResponse(authenticated=True, member=member)
 
@@ -64,7 +65,11 @@ def member_logout(
     response: Response,
     settings: Settings = Depends(get_settings),
 ) -> LogoutResponse:
-    response.delete_cookie(settings.auth_cookie_name)
+    response.delete_cookie(
+        settings.auth_cookie_name,
+        path="/",
+        samesite=settings.auth_cookie_samesite,
+    )
     return LogoutResponse(authenticated=False)
 
 

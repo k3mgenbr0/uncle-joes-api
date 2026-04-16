@@ -22,10 +22,13 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_allow_origins,
-        allow_credentials=settings.cors_allow_origins != ["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.resolved_cors_origins,
+        allow_origin_regex=settings.cors_allow_origin_regex,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=settings.cors_allow_methods,
+        allow_headers=settings.cors_allow_headers,
+        expose_headers=settings.cors_expose_headers,
+        max_age=settings.cors_max_age,
     )
 
     register_exception_handlers(app)

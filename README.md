@@ -193,6 +193,11 @@ Health checks for uptime and BigQuery connectivity.
 1. Install dependencies: `poetry install`
 2. Start the API: `poetry run uvicorn main:app --reload`
 
+Frontend/CORS notes:
+- Local frontend origins for common dev servers are allowed by default: `localhost:3000`, `localhost:5173`, and `localhost:4173` (plus `127.0.0.1` equivalents).
+- For deployed frontends, set `FRONTEND_URL` or `FRONTEND_URLS`.
+- For session cookies across different origins, set `AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAMESITE=none` behind HTTPS.
+
 ## How to Use the API
 - Base URL: `http://127.0.0.1:8000`
 - Open docs: `http://127.0.0.1:8000/docs`

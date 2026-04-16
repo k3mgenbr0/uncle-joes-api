@@ -19,7 +19,27 @@ class Settings(BaseSettings):
         "from BigQuery."
     )
     log_level: str = "INFO"
-    cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+    )
+    cors_allow_origin_regex: str | None = Field(default=None, alias="CORS_ALLOW_ORIGIN_REGEX")
+    cors_allow_methods: list[str] = Field(
+        default_factory=lambda: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]
+    )
+    cors_allow_headers: list[str] = Field(
+        default_factory=lambda: ["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"]
+    )
+    cors_expose_headers: list[str] = Field(default_factory=list)
+    cors_max_age: int = Field(default=600, alias="CORS_MAX_AGE")
+    frontend_url: str | None = Field(default=None, alias="FRONTEND_URL")
+    frontend_urls: list[str] = Field(default_factory=list, alias="FRONTEND_URLS")
     auth_secret_key: str = Field(default="dev-secret", alias="AUTH_SECRET_KEY")
     auth_cookie_name: str = Field(default="ucc_session", alias="AUTH_COOKIE_NAME")
     auth_cookie_ttl_minutes: int = Field(default=480, alias="AUTH_COOKIE_TTL_MINUTES")
@@ -216,8 +236,25 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return value
         if not value:
-            return ["*"]
+            return []
         return [item.strip() for item in value.split(",") if item.strip()]
+
+    @field_validator("cors_allow_methods", "cors_allow_headers", "cors_expose_headers", "frontend_urls", mode="before")
+    @classmethod
+    def parse_str_lists(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, list):
+            return value
+        if not value:
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+    @field_validator("auth_cookie_samesite")
+    @classmethod
+    def validate_samesite(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("AUTH_COOKIE_SAMESITE must be one of: lax, strict, none.")
+        return normalized
 
     @property
     def bigquery_project_id(self) -> str:
@@ -256,6 +293,22 @@ class Settings(BaseSettings):
         return self.bq_order_items_table or (
             f"{self.bigquery_project_id}.{self.bq_dataset}.order_items"
         )
+
+    @property
+    def resolved_cors_origins(self) -> list[str]:
+        origins = [origin.strip() for origin in self.cors_allow_origins if origin.strip()]
+        if self.frontend_url:
+            origins.append(self.frontend_url.strip())
+        origins.extend(origin.strip() for origin in self.frontend_urls if origin.strip())
+        deduped: list[str] = []
+        for origin in origins:
+            if origin not in deduped:
+                deduped.append(origin)
+        return deduped
+
+    @property
+    def cors_allow_credentials(self) -> bool:
+        return bool(self.resolved_cors_origins or self.cors_allow_origin_regex)
 
 
 @lru_cache
