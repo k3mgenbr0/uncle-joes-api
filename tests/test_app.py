@@ -582,11 +582,20 @@ def test_member_auth_session_endpoints() -> None:
     assert response.status_code == 200
     response = client.get("/api/member/profile")
     assert response.status_code == 200
+    response = client.get("/api/member/points")
+    assert response.status_code == 200
+    response = client.get("/api/member/favorites")
+    assert response.status_code == 200
+    response = client.get("/api/member/orders")
+    assert response.status_code == 200
+    response = client.get("/api/member/summary")
+    assert response.status_code == 200
     response = client.get("/api/member/dashboard")
     assert response.status_code == 200
     payload = response.json()
     assert "pagination" in payload
     assert payload["orders"][0]["points_earned"] >= 0
+    assert isinstance(payload["favorites"], list)
     response = client.post("/api/member/logout")
     assert response.status_code == 200
 

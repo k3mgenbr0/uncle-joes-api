@@ -63,6 +63,22 @@ Use case: keep the UI in sync with login state.
 Returns the authenticated member profile with derived rewards and preferred-store data.  
 Use case: account settings and profile screen.
 
+### `GET /api/member/points`
+Returns the authenticated member’s points balance.  
+Use case: profile and rewards widgets.
+
+### `GET /api/member/favorites`
+Returns the authenticated member’s favorite menu items.  
+Use case: profile and dashboard favorites section.
+
+### `GET /api/member/orders`
+Returns the authenticated member’s order history.  
+Use case: account order history views.
+
+### `GET /api/member/summary`
+Returns the authenticated member profile, points, recents, and favorites in one call.  
+Use case: profile page hydration without member-id routing.
+
 ### `GET /api/member/dashboard`
 Returns member profile, points balance, and orders with store info and line items.  
 Use case: primary dashboard data fetch.
@@ -72,6 +88,7 @@ Supports: `include_items`, `limit`, `offset`.
 Dashboard response also includes:
 - `pagination` (limit/offset/total)
 - `points_earned` per order
+- `favorites`
 
 ### `GET /members/{member_id}`
 Returns a member profile (name, email, home store, etc.).  

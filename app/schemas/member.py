@@ -63,4 +63,5 @@ class MemberDashboard(BaseModel):
     member: Member
     points: MemberPoints
     orders: list[DashboardOrder]
+    favorites: list[MemberFavoriteItem] = Field(default_factory=list)
     pagination: dict | None = None
