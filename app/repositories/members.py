@@ -1,5 +1,6 @@
 from google.cloud import bigquery
 
+from app.core.errors import DatabaseError
 from app.core.config import Settings
 from app.db.bigquery import BigQueryRunner, quote_column, quote_table
 
@@ -15,6 +16,13 @@ class MemberRepository:
         self._phone_column = quote_column(settings.member_phone_column)
         self._home_store_column = quote_column(settings.member_home_store_column)
         self._password_column = quote_column(settings.member_password_column)
+        self._fallback_id_column = quote_column("string_field_0")
+        self._fallback_first_name_column = quote_column("string_field_1")
+        self._fallback_last_name_column = quote_column("string_field_2")
+        self._fallback_email_column = quote_column("string_field_3")
+        self._fallback_phone_column = quote_column("string_field_4")
+        self._fallback_home_store_column = quote_column("string_field_5")
+        self._fallback_password_column = quote_column("string_field_6")
 
     def get_member_by_email(self, email: str) -> dict | None:
         query = f"""
@@ -31,7 +39,11 @@ class MemberRepository:
             LIMIT 1
         """
         params = [bigquery.ScalarQueryParameter("email", "STRING", email)]
-        return self._runner.fetch_one(query, params)
+        return self._fetch_one_with_member_fallback(
+            primary_query=query,
+            fallback_query=self._fallback_member_by_email_query(),
+            params=params,
+        )
 
     def get_auth_member_by_email(self, email: str) -> dict | None:
         query = f"""
@@ -46,7 +58,11 @@ class MemberRepository:
             LIMIT 1
         """
         params = [bigquery.ScalarQueryParameter("email", "STRING", email)]
-        return self._runner.fetch_one(query, params)
+        return self._fetch_one_with_member_fallback(
+            primary_query=query,
+            fallback_query=self._fallback_auth_member_by_email_query(),
+            params=params,
+        )
 
     def get_member_by_id(self, member_id: str) -> dict | None:
         query = f"""
@@ -62,4 +78,62 @@ class MemberRepository:
             LIMIT 1
         """
         params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
-        return self._runner.fetch_one(query, params)
+        return self._fetch_one_with_member_fallback(
+            primary_query=query,
+            fallback_query=self._fallback_member_by_id_query(),
+            params=params,
+        )
+
+    def _fetch_one_with_member_fallback(
+        self,
+        *,
+        primary_query: str,
+        fallback_query: str,
+        params: list[bigquery.ScalarQueryParameter],
+    ) -> dict | None:
+        try:
+            return self._runner.fetch_one(primary_query, params)
+        except DatabaseError:
+            return self._runner.fetch_one(fallback_query, params)
+
+    def _fallback_member_by_email_query(self) -> str:
+        return f"""
+            SELECT
+                CAST({self._fallback_id_column} AS STRING) AS id,
+                CAST({self._fallback_id_column} AS STRING) AS member_id,
+                CAST({self._fallback_first_name_column} AS STRING) AS first_name,
+                CAST({self._fallback_last_name_column} AS STRING) AS last_name,
+                CAST({self._fallback_email_column} AS STRING) AS email,
+                CAST({self._fallback_password_column} AS STRING) AS password,
+                CAST({self._fallback_password_column} AS STRING) AS password_hash
+            FROM {self._table}
+            WHERE LOWER(CAST({self._fallback_email_column} AS STRING)) = LOWER(@email)
+            LIMIT 1
+        """
+
+    def _fallback_auth_member_by_email_query(self) -> str:
+        return f"""
+            SELECT
+                CAST({self._fallback_id_column} AS STRING) AS id,
+                CAST({self._fallback_first_name_column} AS STRING) AS first_name,
+                CAST({self._fallback_last_name_column} AS STRING) AS last_name,
+                CAST({self._fallback_email_column} AS STRING) AS email,
+                CAST({self._fallback_password_column} AS STRING) AS password
+            FROM {self._table}
+            WHERE LOWER(CAST({self._fallback_email_column} AS STRING)) = LOWER(@email)
+            LIMIT 1
+        """
+
+    def _fallback_member_by_id_query(self) -> str:
+        return f"""
+            SELECT
+                CAST({self._fallback_id_column} AS STRING) AS member_id,
+                CAST({self._fallback_first_name_column} AS STRING) AS first_name,
+                CAST({self._fallback_last_name_column} AS STRING) AS last_name,
+                CAST({self._fallback_email_column} AS STRING) AS email,
+                CAST({self._fallback_phone_column} AS STRING) AS phone_number,
+                CAST({self._fallback_home_store_column} AS STRING) AS home_store
+            FROM {self._table}
+            WHERE CAST({self._fallback_id_column} AS STRING) = @member_id
+            LIMIT 1
+        """
