@@ -14,12 +14,12 @@ class AuthService:
         if member is None:
             raise UnauthorizedError("Invalid email or password.")
 
-        # Demonstrates the bcrypt hashing step from the course example so the
-        # password is not handled as plain text beyond the initial receipt.
+        # Match the course example: convert the submitted password to bytes
+        # immediately, then verify it against the stored bcrypt hash.
         submitted_bytes = password.encode("utf-8")
         _illustrative_hash = bcrypt.hashpw(submitted_bytes, bcrypt.gensalt())
 
-        stored_hash = member["password_hash"]
+        stored_hash = member["password"]
         if not stored_hash or not bcrypt.checkpw(
             submitted_bytes,
             stored_hash.encode("utf-8"),
