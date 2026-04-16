@@ -33,6 +33,21 @@ class MemberRepository:
         params = [bigquery.ScalarQueryParameter("email", "STRING", email)]
         return self._runner.fetch_one(query, params)
 
+    def get_auth_member_by_email(self, email: str) -> dict | None:
+        query = f"""
+            SELECT
+                CAST({self._id_column} AS STRING) AS id,
+                CAST({self._first_name_column} AS STRING) AS first_name,
+                CAST({self._last_name_column} AS STRING) AS last_name,
+                CAST({self._email_column} AS STRING) AS email,
+                CAST({self._password_column} AS STRING) AS password
+            FROM {self._table}
+            WHERE LOWER(CAST({self._email_column} AS STRING)) = LOWER(@email)
+            LIMIT 1
+        """
+        params = [bigquery.ScalarQueryParameter("email", "STRING", email)]
+        return self._runner.fetch_one(query, params)
+
     def get_member_by_id(self, member_id: str) -> dict | None:
         query = f"""
             SELECT
