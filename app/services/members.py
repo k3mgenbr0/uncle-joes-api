@@ -1,6 +1,6 @@
 import logging
 
-from app.core.errors import NotFoundError
+from app.core.errors import DatabaseError, NotFoundError
 from app.repositories.locations import LocationRepository
 from app.repositories.members import MemberRepository
 from app.repositories.orders import OrderRepository
@@ -23,26 +23,43 @@ class MemberService:
         self._location_repository = location_repository
 
     def get_member(self, member_id: str) -> Member:
+        member = self.get_member_identity(member_id)
+        return self._enrich(member)
+
+    def get_member_identity(self, member_id: str) -> Member:
         row = self._repository.get_member_by_id(member_id)
         if row is None:
             raise NotFoundError(f"Member '{member_id}' was not found.")
-        member = Member.model_validate(row)
-        return self._enrich(member)
+        return Member.model_validate(row)
 
     def get_points(self, member_id: str, points: int) -> MemberPoints:
         logger.info("Calculated points member_id=%s points=%s", member_id, points)
         return MemberPoints(member_id=member_id, total_points=points)
 
     def _enrich(self, member: Member) -> Member:
-        total_points = self._order_repository.get_member_points(member.member_id)
-        member.rewards_tier = self._rewards_tier(total_points)
-        member.points_to_next_reward = self._points_to_next_reward(total_points)
         member.preferred_store_id = member.home_store
-        member.preferred_store = self._preferred_store(member.home_store)
-        member.join_date = self._order_repository.get_member_first_order_date(member.member_id)
         member.birthday_month_day = None
         member.marketing_opt_in = None
         member.profile_photo_url = None
+        try:
+            total_points = self._order_repository.get_member_points(member.member_id)
+            member.rewards_tier = self._rewards_tier(total_points)
+            member.points_to_next_reward = self._points_to_next_reward(total_points)
+            member.join_date = self._order_repository.get_member_first_order_date(member.member_id)
+        except DatabaseError:
+            logger.warning("Skipping order-based member enrichment member_id=%s", member.member_id)
+            member.rewards_tier = None
+            member.points_to_next_reward = None
+            member.join_date = None
+        try:
+            member.preferred_store = self._preferred_store(member.home_store)
+        except DatabaseError:
+            logger.warning(
+                "Skipping preferred-store enrichment member_id=%s home_store=%s",
+                member.member_id,
+                member.home_store,
+            )
+            member.preferred_store = None
         return member
 
     def _preferred_store(self, location_id: str | None) -> LocationSummary | None:

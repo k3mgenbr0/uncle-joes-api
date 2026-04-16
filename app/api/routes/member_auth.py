@@ -35,7 +35,7 @@ def member_login(
     settings: Settings = Depends(get_settings),
 ) -> SessionResponse:
     member_row = auth_service.authenticate(body.email, body.password)
-    member = member_service.get_member(member_row["member_id"])
+    member = member_service.get_member_identity(member_row["member_id"])
     ttl_seconds = settings.auth_cookie_ttl_minutes * 60
     token = create_session_token(
         member_id=member.member_id,

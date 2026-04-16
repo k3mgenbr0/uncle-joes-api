@@ -126,7 +126,7 @@ def get_current_member(
     member_id = payload.get("member_id")
     if not member_id:
         raise UnauthorizedError("Authentication required.")
-    return member_service.get_member(str(member_id))
+    return member_service.get_member_identity(str(member_id))
 
 
 def get_search_service(

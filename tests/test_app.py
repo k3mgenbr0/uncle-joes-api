@@ -161,6 +161,16 @@ class StubMemberService:
             home_store="101",
         )
 
+    def get_member_identity(self, member_id: str) -> Member:
+        return Member(
+            member_id=member_id,
+            first_name="Joe",
+            last_name="Smith",
+            email="member@example.com",
+            phone_number="317-555-9999",
+            home_store="101",
+        )
+
     def get_points(self, member_id: str, points: int) -> MemberPoints:
         return MemberPoints(member_id=member_id, total_points=points)
 
