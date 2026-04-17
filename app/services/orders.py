@@ -177,6 +177,7 @@ class OrderService:
             method=payment_method,
             status="pending",
         )
+        detail.points_redeemed = 0
         detail.store_name = store.store_name
         return detail
 
@@ -191,7 +192,7 @@ class OrderService:
             for item_row in item_rows
         ]
         detail.points_earned = int(detail.total // 1) if detail.total is not None else 0
-        detail.points_redeemed = None
+        detail.points_redeemed = 0
         detail.store_name = f"Uncle Joe's {detail.store_city}" if detail.store_city else None
         detail.payment_summary = PaymentSummary(
             subtotal=detail.subtotal,

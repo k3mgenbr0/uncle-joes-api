@@ -223,7 +223,10 @@ class StubOrderService:
         return orders
 
     def calculate_points(self, member_id: str) -> int:
-        return 12
+        base_points = 12
+        if self.created_order and self.created_order.total is not None:
+            return base_points + int(self.created_order.total // 1)
+        return base_points
 
     def list_location_orders(self, store_id: str, params: OrderQueryParams) -> list[Order]:
         return [
@@ -332,7 +335,7 @@ class StubOrderService:
             tax=0.8,
             total=10.8,
             points_earned=10,
-            points_redeemed=None,
+            points_redeemed=0,
             items=[],
             payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8},
         )
@@ -362,7 +365,7 @@ class StubOrderService:
             tax=tax,
             total=total,
             points_earned=int(total // 1),
-            points_redeemed=None,
+            points_redeemed=0,
             items=[
                 {
                     "order_item_id": f"item-{index}",
@@ -771,6 +774,18 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/api/member/dashboard")
     assert response.status_code == 200
     assert response.json()["orders"][0]["order_id"] == "order-new"
+
+    response = client.get("/api/member/summary")
+    assert response.status_code == 200
+    assert response.json()["recent_orders"][0]["order_id"] == "order-new"
+
+    response = client.get("/api/member/points")
+    assert response.status_code == 200
+    assert response.json()["total_points"] > 12
+
+    response = client.get("/api/member/orders/order-new")
+    assert response.status_code == 200
+    assert response.json()["order_id"] == "order-new"
 
     response = client.get("/orders/order-new")
     assert response.status_code == 200

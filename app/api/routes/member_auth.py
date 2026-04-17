@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Body, Depends, Query, Response
 
 from app.api.dependencies import (
     get_auth_service,
@@ -12,7 +12,7 @@ from app.api.dependencies import (
 )
 from app.core.auth import create_session_token
 from app.core.config import Settings, get_settings
-from app.core.errors import BadRequestError
+from app.core.errors import BadRequestError, UnauthorizedError
 from app.schemas.auth import LogoutResponse, LoginRequest, SessionResponse
 from app.schemas.common import ErrorResponse
 from app.schemas.member import (
@@ -32,6 +32,55 @@ from app.services.orders import OrderService
 
 
 router = APIRouter(prefix="/api/member", tags=["member-auth"])
+
+CREATE_ORDER_EXAMPLE = {
+    "store_id": "101",
+    "items": [
+        {
+            "menu_item_id": "latte",
+            "quantity": 2,
+            "size": "Medium",
+        }
+    ],
+    "payment_method": "pay_in_store",
+}
+
+ORDER_DETAIL_EXAMPLE = {
+    "order_id": "order-123",
+    "member_id": "member-1",
+    "store_id": "101",
+    "store_name": "Uncle Joe's Indianapolis",
+    "store_city": "Indianapolis",
+    "store_state": "IN",
+    "order_date": "2026-04-17T12:30:00Z",
+    "subtotal": 9.0,
+    "discount": 0.0,
+    "tax": 0.63,
+    "total": 9.63,
+    "points_earned": 9,
+    "points_redeemed": 0,
+    "items": [
+        {
+            "order_item_id": "item-1",
+            "order_id": "order-123",
+            "menu_item_id": "latte",
+            "item_name": "Latte",
+            "size": "Medium",
+            "quantity": 2,
+            "price": 4.5,
+            "unit_price": 4.5,
+            "line_total": 9.0,
+        }
+    ],
+    "payment_summary": {
+        "subtotal": 9.0,
+        "discount": 0.0,
+        "tax": 0.63,
+        "total": 9.63,
+        "method": "pay_in_store",
+        "status": "pending",
+    },
+}
 
 
 @router.post(
@@ -190,6 +239,7 @@ def member_orders(
     response_model=OrderDetail,
     status_code=201,
     responses={
+        201: {"content": {"application/json": {"example": ORDER_DETAIL_EXAMPLE}}},
         400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -198,7 +248,15 @@ def member_orders(
     summary="Create a pickup order for the authenticated member",
 )
 def create_member_order(
-    body: CreateOrderRequest,
+    body: CreateOrderRequest = Body(
+        ...,
+        examples={
+            "pickup_order": {
+                "summary": "Pickup order paid in store",
+                "value": CREATE_ORDER_EXAMPLE,
+            }
+        },
+    ),
     current_member: Member = Depends(get_current_member),
     order_service: OrderService = Depends(get_order_service),
     location_service: LocationService = Depends(get_location_service),
@@ -231,6 +289,28 @@ def create_member_order(
         payment_method=body.payment_method,
         tax_rate=settings.order_tax_rate,
     )
+
+
+@router.get(
+    "/orders/{order_id}",
+    response_model=OrderDetail,
+    responses={
+        200: {"content": {"application/json": {"example": ORDER_DETAIL_EXAMPLE}}},
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+    summary="Get one authenticated member order by ID",
+)
+def member_order_detail(
+    order_id: str,
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+) -> OrderDetail:
+    detail = order_service.get_order_detail(order_id)
+    if detail.member_id != current_member.member_id:
+        raise UnauthorizedError("Access denied.")
+    return detail
 
 
 @router.get(

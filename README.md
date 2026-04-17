@@ -90,6 +90,10 @@ Behavior notes:
 - computes subtotal, tax, total, and `points_earned`
 - returns a full order detail payload ready for a confirmation screen
 
+### `GET /api/member/orders/{order_id}`
+Returns one order for the authenticated member using the session-first member API.  
+Use case: order confirmation and “view recent order” screens without member-id routing.
+
 ### `GET /api/member/summary`
 Returns the authenticated member profile, points, recents, and favorites in one call.  
 Use case: profile page hydration without member-id routing.
