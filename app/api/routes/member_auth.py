@@ -131,6 +131,8 @@ def member_logout(
     response.delete_cookie(
         settings.auth_cookie_name,
         path="/",
+        secure=settings.auth_cookie_secure,
+        httponly=True,
         samesite=settings.auth_cookie_samesite,
     )
     return LogoutResponse(authenticated=False)

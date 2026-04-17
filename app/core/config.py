@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     auth_secret_key: str = Field(default="dev-secret", alias="AUTH_SECRET_KEY")
     auth_cookie_name: str = Field(default="ucc_session", alias="AUTH_COOKIE_NAME")
     auth_cookie_ttl_minutes: int = Field(default=480, alias="AUTH_COOKIE_TTL_MINUTES")
-    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
-    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
+    auth_cookie_secure: bool = Field(default=True, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="none", alias="AUTH_COOKIE_SAMESITE")
     order_tax_rate: float = Field(default=0.07, alias="ORDER_TAX_RATE")
 
     google_cloud_project: str | None = Field(default="mgmt545proj", alias="GOOGLE_CLOUD_PROJECT")

@@ -710,6 +710,11 @@ def test_member_auth_session_endpoints() -> None:
         json={"email": "member@example.com", "password": "Coffee123!"},
     )
     assert response.status_code == 200
+    cookie_header = response.headers["set-cookie"]
+    assert "HttpOnly" in cookie_header
+    assert "Secure" in cookie_header
+    assert "SameSite=none" in cookie_header
+    assert "Path=/" in cookie_header
     response = client.get("/api/member/session")
     assert response.status_code == 200
     response = client.get("/api/member/profile")
