@@ -7,9 +7,13 @@ from app.db.bigquery import BigQueryRunner, quote_column, quote_table
 class OrderRepository:
     def __init__(self, runner: BigQueryRunner, settings: Settings) -> None:
         self._runner = runner
+        self._settings = settings
         self._orders_table = quote_table(settings.resolved_orders_table)
         self._order_items_table = quote_table(settings.resolved_order_items_table)
         self._locations_table = quote_table(settings.resolved_locations_table)
+        self._order_metadata_table = quote_table(settings.resolved_order_metadata_table)
+        self._member_favorites_table = quote_table(settings.resolved_member_favorites_table)
+        self._menu_table = quote_table(settings.resolved_menu_table)
 
         self._order_id_column = quote_column(settings.order_id_column)
         self._order_member_id_column = quote_column(settings.order_member_id_column)
@@ -33,6 +37,16 @@ class OrderRepository:
         self._location_id_column = quote_column(settings.location_id_column)
         self._location_city_column = quote_column(settings.location_city_column)
         self._location_state_column = quote_column(settings.location_state_column)
+        self._location_phone_column = quote_column(settings.location_phone_column)
+        self._location_address_one_column = quote_column(settings.location_address_one_column)
+        self._location_address_two_column = quote_column(settings.location_address_two_column)
+        self._location_postal_code_column = quote_column(settings.location_postal_code_column)
+        self._menu_id_column = quote_column(settings.menu_item_id_column)
+        self._menu_name_column = quote_column(settings.menu_name_column)
+        self._menu_category_column = quote_column(settings.menu_category_column)
+        self._menu_size_column = quote_column(settings.menu_size_column)
+        self._menu_price_column = quote_column(settings.menu_price_column)
+        self._order_metadata_ready_by_expr = "COALESCE(m.ready_by_estimate, m.pickup_time)"
 
     def list_orders_for_member(
         self,
@@ -70,6 +84,32 @@ class OrderRepository:
             sort_dir=sort_dir,
         )
 
+    def _ensure_order_metadata_table(self) -> None:
+        query = f"""
+            CREATE TABLE IF NOT EXISTS {self._order_metadata_table} (
+                order_id STRING NOT NULL,
+                pickup_time TIMESTAMP,
+                ready_by_estimate TIMESTAMP,
+                submitted_at TIMESTAMP,
+                order_status STRING,
+                estimated_prep_minutes INT64,
+                payment_method STRING,
+                payment_status STRING,
+                special_instructions STRING
+            )
+        """
+        self._runner.execute(query)
+
+    def _ensure_member_favorites_table(self) -> None:
+        query = f"""
+            CREATE TABLE IF NOT EXISTS {self._member_favorites_table} (
+                member_id STRING NOT NULL,
+                menu_item_id STRING NOT NULL,
+                created_at TIMESTAMP
+            )
+        """
+        self._runner.execute(query)
+
     def list_order_items(self, order_ids: list[str]) -> list[dict]:
         if not order_ids:
             return []
@@ -97,6 +137,7 @@ class OrderRepository:
         limit: int,
         offset: int,
     ) -> list[dict]:
+        self._ensure_order_metadata_table()
         query = f"""
             SELECT
                 CAST(o.{self._order_id_column} AS STRING) AS order_id,
@@ -104,11 +145,18 @@ class OrderRepository:
                 CAST(l.{self._location_city_column} AS STRING) AS store_city,
                 CAST(l.{self._location_state_column} AS STRING) AS store_state,
                 o.{self._order_date_column} AS order_date,
-                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS order_total
+                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS order_total,
+                m.pickup_time AS pickup_time,
+                {self._order_metadata_ready_by_expr} AS ready_by_estimate,
+                m.submitted_at AS submitted_at,
+                CAST(m.order_status AS STRING) AS order_status,
+                SAFE_CAST(m.estimated_prep_minutes AS INT64) AS estimated_prep_minutes
             FROM {self._orders_table} AS o
             LEFT JOIN {self._locations_table} AS l
                 ON CAST(o.{self._order_store_id_column} AS STRING)
                     = CAST(l.{self._location_id_column} AS STRING)
+            LEFT JOIN {self._order_metadata_table} AS m
+                ON CAST(o.{self._order_id_column} AS STRING) = CAST(m.order_id AS STRING)
             WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
             ORDER BY o.{self._order_date_column} DESC
             LIMIT @limit OFFSET @offset
@@ -182,6 +230,57 @@ class OrderRepository:
         params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
         row = self._runner.fetch_one(query, params) or {}
         return row.get("join_date")
+
+    def create_order_metadata(
+        self,
+        *,
+        order_id: str,
+        pickup_time,
+        ready_by_estimate,
+        submitted_at,
+        order_status: str,
+        estimated_prep_minutes: int,
+        payment_method: str,
+        payment_status: str,
+        special_instructions: str | None,
+    ) -> None:
+        self._ensure_order_metadata_table()
+        query = f"""
+            INSERT INTO {self._order_metadata_table} (
+                order_id,
+                pickup_time,
+                ready_by_estimate,
+                submitted_at,
+                order_status,
+                estimated_prep_minutes,
+                payment_method,
+                payment_status,
+                special_instructions
+            )
+            VALUES (
+                @order_id,
+                @pickup_time,
+                @ready_by_estimate,
+                @submitted_at,
+                @order_status,
+                @estimated_prep_minutes,
+                @payment_method,
+                @payment_status,
+                @special_instructions
+            )
+        """
+        params = [
+            bigquery.ScalarQueryParameter("order_id", "STRING", order_id),
+            bigquery.ScalarQueryParameter("pickup_time", "TIMESTAMP", pickup_time),
+            bigquery.ScalarQueryParameter("ready_by_estimate", "TIMESTAMP", ready_by_estimate),
+            bigquery.ScalarQueryParameter("submitted_at", "TIMESTAMP", submitted_at),
+            bigquery.ScalarQueryParameter("order_status", "STRING", order_status),
+            bigquery.ScalarQueryParameter("estimated_prep_minutes", "INT64", estimated_prep_minutes),
+            bigquery.ScalarQueryParameter("payment_method", "STRING", payment_method),
+            bigquery.ScalarQueryParameter("payment_status", "STRING", payment_status),
+            bigquery.ScalarQueryParameter("special_instructions", "STRING", special_instructions),
+        ]
+        self._runner.execute(query, params)
 
     def get_location_stats(self, store_id: str) -> dict:
         query = f"""
@@ -267,6 +366,11 @@ class OrderRepository:
             SELECT
                 CAST(oi.{self._order_item_menu_item_id_column} AS STRING) AS menu_item_id,
                 CAST(oi.{self._order_item_name_column} AS STRING) AS item_name,
+                CAST(mi.{self._menu_category_column} AS STRING) AS category,
+                CAST(mi.{self._menu_size_column} AS STRING) AS size,
+                SAFE_CAST(mi.{self._menu_price_column} AS FLOAT64) AS current_price,
+                CAST(NULL AS STRING) AS image_url,
+                FALSE AS is_explicit,
                 COUNT(DISTINCT CAST(oi.{self._order_item_order_id_column} AS STRING))
                     AS total_orders,
                 COALESCE(
@@ -284,13 +388,74 @@ class OrderRepository:
             INNER JOIN {self._orders_table} AS o
                 ON CAST(oi.{self._order_item_order_id_column} AS STRING)
                     = CAST(o.{self._order_id_column} AS STRING)
+            LEFT JOIN {self._menu_table} AS mi
+                ON CAST(oi.{self._order_item_menu_item_id_column} AS STRING)
+                    = CAST(mi.{self._menu_id_column} AS STRING)
             WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
             {date_filter}
-            GROUP BY menu_item_id, item_name
+            GROUP BY menu_item_id, item_name, category, size, current_price, image_url, is_explicit
             ORDER BY total_quantity DESC, total_revenue DESC
             LIMIT @limit
         """
         return self._runner.fetch_all(query, params)
+
+    def list_member_saved_favorites(self, member_id: str) -> list[dict]:
+        self._ensure_member_favorites_table()
+        query = f"""
+            SELECT
+                CAST(f.menu_item_id AS STRING) AS menu_item_id,
+                CAST(m.{self._menu_name_column} AS STRING) AS item_name,
+                CAST(m.{self._menu_category_column} AS STRING) AS category,
+                CAST(m.{self._menu_size_column} AS STRING) AS size,
+                SAFE_CAST(m.{self._menu_price_column} AS FLOAT64) AS current_price,
+                CAST(NULL AS STRING) AS image_url,
+                TRUE AS is_explicit,
+                0 AS total_orders,
+                0 AS total_quantity,
+                0.0 AS total_revenue
+            FROM {self._member_favorites_table} AS f
+            LEFT JOIN {self._menu_table} AS m
+                ON CAST(f.menu_item_id AS STRING) = CAST(m.{self._menu_id_column} AS STRING)
+            WHERE CAST(f.member_id AS STRING) = @member_id
+            ORDER BY f.created_at DESC, menu_item_id
+        """
+        params = [bigquery.ScalarQueryParameter("member_id", "STRING", member_id)]
+        return self._runner.fetch_all(query, params)
+
+    def add_member_favorite(self, member_id: str, menu_item_id: str) -> None:
+        self._ensure_member_favorites_table()
+        query = f"""
+            MERGE {self._member_favorites_table} AS target
+            USING (
+                SELECT
+                    @member_id AS member_id,
+                    @menu_item_id AS menu_item_id,
+                    CURRENT_TIMESTAMP() AS created_at
+            ) AS source
+            ON CAST(target.member_id AS STRING) = source.member_id
+               AND CAST(target.menu_item_id AS STRING) = source.menu_item_id
+            WHEN NOT MATCHED THEN
+              INSERT (member_id, menu_item_id, created_at)
+              VALUES (source.member_id, source.menu_item_id, source.created_at)
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("menu_item_id", "STRING", menu_item_id),
+        ]
+        self._runner.execute(query, params)
+
+    def delete_member_favorite(self, member_id: str, menu_item_id: str) -> None:
+        self._ensure_member_favorites_table()
+        query = f"""
+            DELETE FROM {self._member_favorites_table}
+            WHERE CAST(member_id AS STRING) = @member_id
+              AND CAST(menu_item_id AS STRING) = @menu_item_id
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("menu_item_id", "STRING", menu_item_id),
+        ]
+        self._runner.execute(query, params)
 
     def list_member_favorite_trends(
         self,
@@ -348,6 +513,7 @@ class OrderRepository:
         return self._runner.fetch_all(query, params)
 
     def get_order_detail(self, order_id: str) -> dict | None:
+        self._ensure_order_metadata_table()
         query = f"""
             SELECT
                 CAST(o.{self._order_id_column} AS STRING) AS order_id,
@@ -355,7 +521,19 @@ class OrderRepository:
                 CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
                 CAST(l.{self._location_city_column} AS STRING) AS store_city,
                 CAST(l.{self._location_state_column} AS STRING) AS store_state,
+                CAST(l.{self._location_phone_column} AS STRING) AS store_phone,
+                CAST(l.{self._location_address_one_column} AS STRING) AS store_address_one,
+                CAST(l.{self._location_address_two_column} AS STRING) AS store_address_two,
+                CAST(l.{self._location_postal_code_column} AS STRING) AS store_postal_code,
                 o.{self._order_date_column} AS order_date,
+                m.pickup_time AS pickup_time,
+                {self._order_metadata_ready_by_expr} AS ready_by_estimate,
+                m.submitted_at AS submitted_at,
+                CAST(m.order_status AS STRING) AS order_status,
+                SAFE_CAST(m.estimated_prep_minutes AS INT64) AS estimated_prep_minutes,
+                CAST(m.special_instructions AS STRING) AS special_instructions,
+                CAST(m.payment_method AS STRING) AS payment_method,
+                CAST(m.payment_status AS STRING) AS payment_status,
                 SAFE_CAST(o.{self._items_subtotal_column} AS FLOAT64) AS subtotal,
                 SAFE_CAST(o.{self._order_discount_column} AS FLOAT64) AS discount,
                 SAFE_CAST(o.{self._sales_tax_column} AS FLOAT64) AS tax,
@@ -364,6 +542,8 @@ class OrderRepository:
             LEFT JOIN {self._locations_table} AS l
                 ON CAST(o.{self._order_store_id_column} AS STRING)
                     = CAST(l.{self._location_id_column} AS STRING)
+            LEFT JOIN {self._order_metadata_table} AS m
+                ON CAST(o.{self._order_id_column} AS STRING) = CAST(m.order_id AS STRING)
             WHERE CAST(o.{self._order_id_column} AS STRING) = @order_id
             LIMIT 1
         """
@@ -473,6 +653,7 @@ class OrderRepository:
         sort_by: str | None,
         sort_dir: str,
     ) -> list[dict]:
+        self._ensure_order_metadata_table()
         order_by = self._resolve_sort(sort_by, sort_dir)
         query = f"""
             SELECT
@@ -484,8 +665,16 @@ class OrderRepository:
                 SAFE_CAST({self._order_discount_column} AS FLOAT64) AS order_discount,
                 SAFE_CAST({self._order_subtotal_column} AS FLOAT64) AS order_subtotal,
                 SAFE_CAST({self._sales_tax_column} AS FLOAT64) AS sales_tax,
-                SAFE_CAST({self._order_total_column} AS FLOAT64) AS order_total
-            FROM {self._orders_table}
+                SAFE_CAST({self._order_total_column} AS FLOAT64) AS order_total,
+                m.pickup_time AS pickup_time,
+                {self._order_metadata_ready_by_expr} AS ready_by_estimate,
+                m.submitted_at AS submitted_at,
+                CAST(m.order_status AS STRING) AS order_status,
+                SAFE_CAST(m.estimated_prep_minutes AS INT64) AS estimated_prep_minutes,
+                CAST(m.special_instructions AS STRING) AS special_instructions
+            FROM {self._orders_table} AS o
+            LEFT JOIN {self._order_metadata_table} AS m
+                ON CAST(o.{self._order_id_column} AS STRING) = CAST(m.order_id AS STRING)
             WHERE CAST({filter_column} AS STRING) = @{filter_param_name}
             ORDER BY {order_by}
             LIMIT @limit OFFSET @offset

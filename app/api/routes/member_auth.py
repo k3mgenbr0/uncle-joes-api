@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Query, Response
@@ -18,7 +19,9 @@ from app.schemas.common import ErrorResponse
 from app.schemas.member import (
     Member,
     MemberDashboard,
+    MemberFavoriteCreateRequest,
     MemberFavoriteItem,
+    MemberFavoriteMutation,
     MemberPoints,
     MemberPointsHistoryEntry,
     MemberSummary,
@@ -43,6 +46,8 @@ CREATE_ORDER_EXAMPLE = {
         }
     ],
     "payment_method": "pay_in_store",
+    "pickup_time": "2026-04-18T09:30:00Z",
+    "special_instructions": "Extra hot, please.",
 }
 
 ORDER_DETAIL_EXAMPLE = {
@@ -53,12 +58,26 @@ ORDER_DETAIL_EXAMPLE = {
     "store_city": "Indianapolis",
     "store_state": "IN",
     "order_date": "2026-04-17T12:30:00Z",
+    "pickup_time": "2026-04-17T12:45:00Z",
+    "ready_by_estimate": "2026-04-17T12:45:00Z",
+    "submitted_at": "2026-04-17T12:30:00Z",
+    "order_status": "order_received",
+    "estimated_prep_minutes": 15,
     "subtotal": 9.0,
     "discount": 0.0,
     "tax": 0.63,
     "total": 9.63,
     "points_earned": 9,
     "points_redeemed": 0,
+    "store_phone": "317-555-0101",
+    "location": {
+        "location_id": "101",
+        "store_name": "Uncle Joe's Indianapolis",
+        "city": "Indianapolis",
+        "state": "IN",
+        "full_address": "123 Main St, Indianapolis, IN, 46204",
+        "phone": "317-555-0101"
+    },
     "items": [
         {
             "order_item_id": "item-1",
@@ -211,6 +230,44 @@ def member_favorites(
     )
 
 
+@router.post(
+    "/favorites",
+    response_model=MemberFavoriteMutation,
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Save an explicit favorite for the authenticated member",
+)
+def create_member_favorite(
+    body: MemberFavoriteCreateRequest = Body(
+        ...,
+        examples={"favorite": {"value": {"menu_item_id": "latte"}}},
+    ),
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+    menu_service: MenuService = Depends(get_menu_service),
+) -> MemberFavoriteMutation:
+    menu_item_id = body.menu_item_id.strip()
+    if not menu_item_id:
+        raise BadRequestError("menu_item_id is required.")
+    menu_item = menu_service.get_menu_item(menu_item_id)
+    order_service.add_member_favorite(current_member.member_id, menu_item)
+    return MemberFavoriteMutation(success=True, menu_item_id=menu_item.item_id)
+
+
+@router.delete(
+    "/favorites/{menu_item_id}",
+    response_model=MemberFavoriteMutation,
+    responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Remove an explicit favorite for the authenticated member",
+)
+def delete_member_favorite(
+    menu_item_id: str,
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+) -> MemberFavoriteMutation:
+    order_service.delete_member_favorite(current_member.member_id, menu_item_id)
+    return MemberFavoriteMutation(success=True, menu_item_id=menu_item_id)
+
+
 @router.get(
     "/orders",
     response_model=list[Order],
@@ -268,6 +325,10 @@ def create_member_order(
     store = location_service.get_location(body.store_id)
     if store.pickup_supported is False:
         raise BadRequestError("Pickup is not available at this location.")
+    candidate_pickup_time = body.pickup_time or (
+        datetime.now(timezone.utc) + timedelta(minutes=settings.order_default_prep_minutes)
+    )
+    location_service.validate_pickup_time(store, candidate_pickup_time)
 
     validated_items: list[dict] = []
     for item in body.items:
@@ -290,6 +351,9 @@ def create_member_order(
         items=validated_items,
         payment_method=body.payment_method,
         tax_rate=settings.order_tax_rate,
+        pickup_time=body.pickup_time,
+        special_instructions=body.special_instructions,
+        estimated_prep_minutes=settings.order_default_prep_minutes,
     )
 
 

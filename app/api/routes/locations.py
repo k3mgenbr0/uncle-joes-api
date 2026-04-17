@@ -2,12 +2,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_location_service, get_order_service
+from app.api.dependencies import get_location_service, get_menu_service, get_order_service
 from app.schemas.common import ErrorResponse
 from app.schemas.location import Location, LocationQueryParams
+from app.schemas.menu import MenuItem, MenuQueryParams
 from app.schemas.order import Order, OrderQueryParams
 from app.schemas.stats import LocationDailyStats, LocationOrderStats, LocationWeeklyStats
 from app.services.locations import LocationService
+from app.services.menu import MenuService
 from app.services.orders import OrderService
 
 
@@ -55,6 +57,38 @@ def get_location(
     service: LocationService = Depends(get_location_service),
 ) -> Location:
     return service.get_location(location_id)
+
+
+@router.get(
+    "/{location_id}/menu",
+    response_model=list[MenuItem],
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="List menu items for a specific pickup location",
+)
+def get_location_menu(
+    location_id: str,
+    category: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+    min_price: Annotated[float | None, Query(ge=0)] = None,
+    max_price: Annotated[float | None, Query(ge=0)] = None,
+    sort_by: Annotated[str | None, Query()] = None,
+    sort_dir: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    location_service: LocationService = Depends(get_location_service),
+    menu_service: MenuService = Depends(get_menu_service),
+) -> list[MenuItem]:
+    location = location_service.get_location(location_id)
+    params = MenuQueryParams(
+        category=category,
+        min_price=min_price,
+        max_price=max_price,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+    )
+    store_available = bool(location.pickup_supported)
+    return menu_service.list_menu_items_for_store(params, store_available=store_available)
 
 
 @router.get(

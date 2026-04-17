@@ -29,6 +29,8 @@ class MenuItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     customization_options: list[str] = Field(default_factory=list)
     related_items: list[RelatedMenuItem] = Field(default_factory=list)
+    available_at_store: bool | None = None
+    store_availability_status: str | None = None
 
 
 class MenuRecommendation(BaseModel):

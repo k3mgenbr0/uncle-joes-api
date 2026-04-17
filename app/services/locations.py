@@ -1,7 +1,7 @@
 import logging
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
-from app.core.errors import NotFoundError
+from app.core.errors import BadRequestError, NotFoundError
 from app.repositories.locations import LocationRepository
 from app.schemas.location import Location, LocationHoursDay, LocationQueryParams
 
@@ -31,6 +31,49 @@ class LocationService:
             raise NotFoundError(f"Location '{location_id}' was not found.")
         logger.info("Fetched location location_id=%s", location_id)
         return self._enrich(Location.model_validate(row))
+
+    def validate_pickup_time(
+        self,
+        location: Location,
+        pickup_time: datetime,
+        *,
+        buffer_minutes: int = 10,
+    ) -> None:
+        weekday = pickup_time.strftime("%A").lower()
+        hours = getattr(location.hours, weekday, None)
+        if not hours:
+            raise BadRequestError("Pickup time must be during store hours.")
+        open_time = self._parse_time(hours.open)
+        close_time = self._parse_time(hours.close)
+        if not open_time or not close_time:
+            raise BadRequestError("Pickup time must be during store hours.")
+
+        pickup_local = pickup_time.astimezone()
+        if pickup_local <= datetime.now().astimezone():
+            raise BadRequestError("Pickup time must be in the future.")
+        open_at = pickup_local.replace(
+            hour=open_time.hour,
+            minute=open_time.minute,
+            second=open_time.second,
+            microsecond=0,
+        )
+        close_at = pickup_local.replace(
+            hour=close_time.hour,
+            minute=close_time.minute,
+            second=close_time.second,
+            microsecond=0,
+        )
+        if close_at <= open_at:
+            close_at += timedelta(days=1)
+            if pickup_local < open_at:
+                pickup_local += timedelta(days=1)
+
+        earliest = open_at + timedelta(minutes=buffer_minutes)
+        latest = close_at - timedelta(minutes=buffer_minutes)
+        if pickup_local < earliest or pickup_local > latest:
+            raise BadRequestError(
+                "Pickup time must be at least 10 minutes after opening and 10 minutes before closing."
+            )
 
     def _enrich(self, location: Location) -> Location:
         location.full_address = self._build_full_address(location)

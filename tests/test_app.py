@@ -79,6 +79,9 @@ class StubLocationService:
             pickup_supported=True,
         )
 
+    def validate_pickup_time(self, location: Location, pickup_time, *, buffer_minutes: int = 10) -> None:
+        return None
+
 
 class StubMenuService:
     def list_menu_items(self, params: MenuQueryParams) -> list[MenuItem]:
@@ -114,6 +117,18 @@ class StubMenuService:
 
     def list_sizes(self) -> list[str]:
         return ["Small", "Medium", "Large"]
+
+    def list_menu_items_for_store(
+        self,
+        params: MenuQueryParams,
+        *,
+        store_available: bool,
+    ) -> list[MenuItem]:
+        items = self.list_menu_items(params)
+        for item in items:
+            item.available_at_store = store_available
+            item.store_availability_status = "available" if store_available else "unavailable"
+        return items
 
     def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> MenuItemStats:
         return MenuItemStats(
@@ -179,6 +194,7 @@ class StubMemberService:
 class StubOrderService:
     def __init__(self) -> None:
         self.created_order: OrderDetail | None = None
+        self.explicit_favorites: set[str] = set()
 
     def validate_order_item(
         self,
@@ -217,6 +233,12 @@ class StubOrderService:
                     order_subtotal=self.created_order.subtotal,
                     sales_tax=self.created_order.tax,
                     order_total=self.created_order.total,
+                    pickup_time=self.created_order.pickup_time,
+                    ready_by_estimate=self.created_order.ready_by_estimate,
+                    submitted_at=self.created_order.submitted_at,
+                    order_status=self.created_order.order_status,
+                    estimated_prep_minutes=self.created_order.estimated_prep_minutes,
+                    special_instructions=self.created_order.special_instructions,
                     items=self.created_order.items,
                 ),
             )
@@ -298,6 +320,7 @@ class StubOrderService:
                 store_state="IN",
                 order_total=9.75,
                 points_earned=9,
+                order_status="brewing",
                 items=[],
             )
         ]
@@ -312,6 +335,11 @@ class StubOrderService:
                     order_date=self.created_order.order_date,
                     order_total=self.created_order.total,
                     points_earned=self.created_order.points_earned,
+                    pickup_time=self.created_order.pickup_time,
+                    ready_by_estimate=self.created_order.ready_by_estimate,
+                    submitted_at=self.created_order.submitted_at,
+                    order_status=self.created_order.order_status,
+                    estimated_prep_minutes=self.created_order.estimated_prep_minutes,
                     items=self.created_order.items,
                 ),
             )
@@ -330,14 +358,22 @@ class StubOrderService:
             store_name="Uncle Joe's Indianapolis",
             store_city="Indianapolis",
             store_state="IN",
+            store_phone="317-555-0101",
+            location={"location_id": "101"},
             subtotal=10.0,
             discount=0.0,
             tax=0.8,
             total=10.8,
             points_earned=10,
             points_redeemed=0,
+            pickup_time="2026-04-17T12:15:00Z",
+            ready_by_estimate="2026-04-17T12:15:00Z",
+            submitted_at="2026-04-17T12:00:00Z",
+            order_status="ready_for_pickup",
+            estimated_prep_minutes=15,
+            special_instructions=None,
             items=[],
-            payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8},
+            payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8, "method": "pay_in_store", "status": "pending"},
         )
 
     def create_member_order(
@@ -348,6 +384,9 @@ class StubOrderService:
         items: list[dict],
         payment_method: str,
         tax_rate: float,
+        pickup_time=None,
+        special_instructions: str | None = None,
+        estimated_prep_minutes: int = 15,
     ) -> OrderDetail:
         subtotal = round(sum(item["quantity"] * item["unit_price"] for item in items), 2)
         tax = round(subtotal * tax_rate, 2)
@@ -359,7 +398,15 @@ class StubOrderService:
             store_name=store.store_name,
             store_city=store.city,
             store_state=store.state,
+            store_phone=store.phone,
+            location={"location_id": store.location_id, "store_name": store.store_name},
             order_date="2026-04-17T12:00:00Z",
+            pickup_time=pickup_time or "2026-04-17T12:15:00Z",
+            ready_by_estimate=pickup_time or "2026-04-17T12:15:00Z",
+            submitted_at="2026-04-17T12:00:00Z",
+            order_status="order_received",
+            estimated_prep_minutes=estimated_prep_minutes,
+            special_instructions=special_instructions,
             subtotal=subtotal,
             discount=0.0,
             tax=tax,
@@ -397,15 +444,55 @@ class StubOrderService:
         limit: int,
         window_days: int | None = None,
     ) -> list[MemberFavoriteItem]:
-        return [
+        favorites = [
             MemberFavoriteItem(
                 menu_item_id="latte",
                 item_name="Latte",
+                category="Espresso",
+                size="Medium",
+                current_price=4.5,
+                image_url=None,
+                is_explicit=False,
                 total_orders=10,
                 total_quantity=25,
                 total_revenue=112.5,
             )
         ]
+        for menu_item_id in sorted(self.explicit_favorites):
+            if menu_item_id != "latte":
+                favorites.append(
+                    MemberFavoriteItem(
+                        menu_item_id=menu_item_id,
+                        item_name=menu_item_id.title(),
+                        category="Espresso",
+                        size="Medium",
+                        current_price=4.5,
+                        image_url=None,
+                        is_explicit=True,
+                        total_orders=0,
+                        total_quantity=0,
+                        total_revenue=0.0,
+                    )
+                )
+        return favorites[:limit]
+
+    def add_member_favorite(self, member_id: str, menu_item: MenuItem) -> MemberFavoriteItem:
+        self.explicit_favorites.add(menu_item.item_id)
+        return MemberFavoriteItem(
+            menu_item_id=menu_item.item_id,
+            item_name=menu_item.name,
+            category=menu_item.category,
+            size=menu_item.size,
+            current_price=menu_item.price,
+            image_url=None,
+            is_explicit=True,
+            total_orders=0,
+            total_quantity=0,
+            total_revenue=0.0,
+        )
+
+    def delete_member_favorite(self, member_id: str, menu_item_id: str) -> None:
+        self.explicit_favorites.discard(menu_item_id)
 
     def list_member_favorite_trends(
         self,
@@ -647,6 +734,9 @@ def test_location_orders_and_stats_endpoints() -> None:
     response = client.get("/locations/101")
     assert response.status_code == 200
     assert "store_name" in response.json()
+    response = client.get("/locations/101/menu")
+    assert response.status_code == 200
+    assert response.json()[0]["available_at_store"] is True
     response = client.get("/locations/101/orders")
     assert response.status_code == 200
     assert response.json()[0]["order_id"] == "order-2"
@@ -726,6 +816,11 @@ def test_member_auth_session_endpoints() -> None:
     assert response.json()[0]["points_earned"] == 9
     response = client.get("/api/member/favorites")
     assert response.status_code == 200
+    response = client.post("/api/member/favorites", json={"menu_item_id": "mocha"})
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    response = client.delete("/api/member/favorites/mocha")
+    assert response.status_code == 200
     response = client.get("/api/member/orders")
     assert response.status_code == 200
     response = client.get("/api/member/summary")
@@ -764,6 +859,8 @@ def test_create_member_order_endpoint() -> None:
                 }
             ],
             "payment_method": "pay_in_store",
+            "pickup_time": "2026-04-18T09:30:00Z",
+            "special_instructions": "Extra hot, please.",
         },
     )
     assert response.status_code == 201
@@ -771,10 +868,13 @@ def test_create_member_order_endpoint() -> None:
     assert payload["order_id"] == "order-new"
     assert payload["payment_summary"]["method"] == "pay_in_store"
     assert payload["payment_summary"]["status"] == "pending"
+    assert payload["pickup_time"] is not None
+    assert payload["order_status"] == "order_received"
 
     response = client.get("/api/member/orders")
     assert response.status_code == 200
     assert response.json()[0]["order_id"] == "order-new"
+    assert response.json()[0]["order_status"] is not None
 
     response = client.get("/api/member/dashboard")
     assert response.status_code == 200
@@ -791,6 +891,7 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/api/member/orders/order-new")
     assert response.status_code == 200
     assert response.json()["order_id"] == "order-new"
+    assert response.json()["location"]["location_id"] == "101"
 
     response = client.get("/orders/order-new")
     assert response.status_code == 200

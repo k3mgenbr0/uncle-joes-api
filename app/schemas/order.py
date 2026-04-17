@@ -2,6 +2,16 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas.location import LocationSummary
+
+OrderStatus = Literal[
+    "order_received",
+    "brewing",
+    "finishing_touches",
+    "ready_for_pickup",
+    "completed",
+    "cancelled",
+]
 
 
 class OrderItem(BaseModel):
@@ -30,6 +40,12 @@ class Order(BaseModel):
     order_subtotal: float | None = None
     sales_tax: float | None = None
     order_total: float | None = None
+    pickup_time: datetime | None = None
+    ready_by_estimate: datetime | None = None
+    submitted_at: datetime | None = None
+    order_status: OrderStatus | None = None
+    estimated_prep_minutes: int | None = None
+    special_instructions: str | None = None
     items: list[OrderItem] = Field(default_factory=list)
 
 
@@ -51,6 +67,11 @@ class DashboardOrder(BaseModel):
     order_date: datetime | None = None
     order_total: float | None = None
     points_earned: int | None = None
+    pickup_time: datetime | None = None
+    ready_by_estimate: datetime | None = None
+    submitted_at: datetime | None = None
+    order_status: OrderStatus | None = None
+    estimated_prep_minutes: int | None = None
     items: list[OrderItem] = Field(default_factory=list)
 
 
@@ -73,6 +94,8 @@ class CreateOrderRequest(BaseModel):
     store_id: str
     items: list[CreateOrderItemRequest] = Field(min_length=1)
     payment_method: Literal["pay_in_store"]
+    pickup_time: datetime | None = None
+    special_instructions: str | None = Field(default=None, max_length=500)
 
 
 class OrderDetail(BaseModel):
@@ -84,7 +107,15 @@ class OrderDetail(BaseModel):
     store_name: str | None = None
     store_city: str | None = None
     store_state: str | None = None
+    store_phone: str | None = None
+    location: LocationSummary | None = None
     order_date: datetime | None = None
+    pickup_time: datetime | None = None
+    ready_by_estimate: datetime | None = None
+    submitted_at: datetime | None = None
+    order_status: OrderStatus | None = None
+    estimated_prep_minutes: int | None = None
+    special_instructions: str | None = None
     subtotal: float | None = None
     discount: float | None = None
     tax: float | None = None

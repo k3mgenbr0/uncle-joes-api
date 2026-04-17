@@ -77,6 +77,18 @@ Supports: `limit`.
 Returns the authenticated member’s favorite menu items.  
 Use case: profile and dashboard favorites section.
 
+Includes:
+- inferred favorites from purchase history
+- explicit saved favorites added by the member
+
+### `POST /api/member/favorites`
+Saves an explicit favorite menu item for the authenticated member.  
+Use case: “Save as favorite” buttons in menu and order history views.
+
+### `DELETE /api/member/favorites/{menu_item_id}`
+Removes an explicit favorite menu item for the authenticated member.  
+Use case: “Unfavorite” actions in the profile area.
+
 ### `GET /api/member/orders`
 Returns the authenticated member’s order history.  
 Use case: account order history views.
@@ -87,8 +99,19 @@ Use case: cart submission and order confirmation for the customer app.
 
 Behavior notes:
 - validates the store and menu items before creating the order
+- validates pickup time against store hours
+- blocks pickup within 10 minutes of opening or 10 minutes of closing
 - computes subtotal, tax, total, and `points_earned`
 - returns a full order detail payload ready for a confirmation screen
+
+Order fields now include:
+- `pickup_time`
+- `ready_by_estimate`
+- `submitted_at`
+- `order_status`
+- `estimated_prep_minutes`
+- `special_instructions`
+- nested location summary and store phone when available
 
 ### `GET /api/member/orders/{order_id}`
 Returns one order for the authenticated member using the session-first member API.  
@@ -109,6 +132,14 @@ Dashboard response also includes:
 - `points_earned` per order
 - `favorites`
 - `points_history`
+
+Order status values:
+- `order_received`
+- `brewing`
+- `finishing_touches`
+- `ready_for_pickup`
+- `completed`
+- `cancelled`
 
 Order creation uses the configured `ORDER_TAX_RATE` environment variable, which defaults to `0.07`.
 
@@ -155,6 +186,14 @@ Returns orders placed at a specific store.
 Use case: store performance view and staff dashboards.
 
 Supports: `limit`, `offset`, `include_items`, `sort_by`, `sort_dir`.
+
+### `GET /locations/{location_id}/menu`
+Returns menu items annotated for a specific pickup location.  
+Use case: store-aware ordering and pickup-store menu filtering.
+
+Current availability behavior is static:
+- if the location supports pickup, returned items are marked available
+- if the location does not support pickup, returned items are marked unavailable
 
 ### `GET /locations/{location_id}/stats`
 Returns store‑level totals: total orders, total revenue, and average order value.  

@@ -47,6 +47,18 @@ class MenuService:
         logger.info("Fetched menu sizes count=%s", len(rows))
         return rows
 
+    def list_menu_items_for_store(
+        self,
+        params: MenuQueryParams,
+        *,
+        store_available: bool,
+    ) -> list[MenuItem]:
+        items = self.list_menu_items(params)
+        for item in items:
+            item.available_at_store = store_available
+            item.store_availability_status = "available" if store_available else "unavailable"
+        return items
+
     def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> MenuItemStats:
         if self._repository.get_menu_item(item_id) is None:
             raise NotFoundError(f"Menu item '{item_id}' was not found.")

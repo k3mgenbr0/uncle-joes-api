@@ -48,9 +48,23 @@ class MemberPointsHistoryEntry(BaseModel):
 class MemberFavoriteItem(BaseModel):
     menu_item_id: str
     item_name: str | None = None
+    category: str | None = None
+    size: str | None = None
+    current_price: float | None = None
+    image_url: str | None = None
+    is_explicit: bool = False
     total_orders: int
     total_quantity: int
     total_revenue: float
+
+
+class MemberFavoriteMutation(BaseModel):
+    success: bool
+    menu_item_id: str
+
+
+class MemberFavoriteCreateRequest(BaseModel):
+    menu_item_id: str
 
 
 class MemberFavoriteTrendPoint(BaseModel):

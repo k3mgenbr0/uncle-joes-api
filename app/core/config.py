@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = Field(default=True, alias="AUTH_COOKIE_SECURE")
     auth_cookie_samesite: str = Field(default="none", alias="AUTH_COOKIE_SAMESITE")
     order_tax_rate: float = Field(default=0.07, alias="ORDER_TAX_RATE")
+    order_default_prep_minutes: int = Field(default=15, alias="ORDER_DEFAULT_PREP_MINUTES")
 
     google_cloud_project: str | None = Field(default="mgmt545proj", alias="GOOGLE_CLOUD_PROJECT")
     bq_project_id: str | None = Field(default="mgmt545proj", alias="BQ_PROJECT_ID")
@@ -59,6 +60,8 @@ class Settings(BaseSettings):
         default=None,
         alias="BQ_ORDER_ITEMS_TABLE",
     )
+    bq_order_metadata_table: str | None = Field(default=None, alias="BQ_ORDER_METADATA_TABLE")
+    bq_member_favorites_table: str | None = Field(default=None, alias="BQ_MEMBER_FAVORITES_TABLE")
 
     location_id_column: str = Field(default="id", alias="LOCATION_ID_COLUMN")
     location_city_column: str = Field(default="city", alias="LOCATION_CITY_COLUMN")
@@ -294,6 +297,18 @@ class Settings(BaseSettings):
     def resolved_order_items_table(self) -> str:
         return self.bq_order_items_table or (
             f"{self.bigquery_project_id}.{self.bq_dataset}.order_items"
+        )
+
+    @property
+    def resolved_order_metadata_table(self) -> str:
+        return self.bq_order_metadata_table or (
+            f"{self.bigquery_project_id}.{self.bq_dataset}.order_metadata"
+        )
+
+    @property
+    def resolved_member_favorites_table(self) -> str:
+        return self.bq_member_favorites_table or (
+            f"{self.bigquery_project_id}.{self.bq_dataset}.member_favorites"
         )
 
     @property
