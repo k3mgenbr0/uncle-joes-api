@@ -5,17 +5,29 @@ from fastapi import APIRouter, Depends, Query, Response
 from app.api.dependencies import (
     get_auth_service,
     get_current_member,
+    get_location_service,
     get_member_service,
+    get_menu_service,
     get_order_service,
 )
 from app.core.auth import create_session_token
 from app.core.config import Settings, get_settings
+from app.core.errors import BadRequestError
 from app.schemas.auth import LogoutResponse, LoginRequest, SessionResponse
 from app.schemas.common import ErrorResponse
-from app.schemas.member import Member, MemberDashboard, MemberFavoriteItem, MemberPoints, MemberSummary
-from app.schemas.order import Order, OrderQueryParams
+from app.schemas.member import (
+    Member,
+    MemberDashboard,
+    MemberFavoriteItem,
+    MemberPoints,
+    MemberPointsHistoryEntry,
+    MemberSummary,
+)
+from app.schemas.order import CreateOrderRequest, Order, OrderDetail, OrderQueryParams
 from app.services.auth import AuthService
+from app.services.locations import LocationService
 from app.services.members import MemberService
+from app.services.menu import MenuService
 from app.services.orders import OrderService
 
 
@@ -116,6 +128,20 @@ def member_points(
 
 
 @router.get(
+    "/points/history",
+    response_model=list[MemberPointsHistoryEntry],
+    responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get the authenticated member points history",
+)
+def member_points_history(
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+) -> list[MemberPointsHistoryEntry]:
+    return order_service.list_member_points_history(current_member.member_id, limit)
+
+
+@router.get(
     "/favorites",
     response_model=list[MemberFavoriteItem],
     responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
@@ -157,6 +183,54 @@ def member_orders(
         sort_dir=sort_dir,
     )
     return order_service.list_member_orders(current_member.member_id, params)
+
+
+@router.post(
+    "/orders",
+    response_model=OrderDetail,
+    status_code=201,
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+    summary="Create a pickup order for the authenticated member",
+)
+def create_member_order(
+    body: CreateOrderRequest,
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
+    menu_service: MenuService = Depends(get_menu_service),
+    settings: Settings = Depends(get_settings),
+) -> OrderDetail:
+    store = location_service.get_location(body.store_id)
+    if store.pickup_supported is False:
+        raise BadRequestError("Pickup is not available at this location.")
+
+    validated_items: list[dict] = []
+    for item in body.items:
+        menu_item = menu_service.get_menu_item(item.menu_item_id)
+        if menu_item.size and menu_item.size.lower() != item.size.strip().lower():
+            raise BadRequestError(
+                f"Size '{item.size}' is not available for menu item '{item.menu_item_id}'."
+            )
+        validated_items.append(
+            order_service.validate_order_item(
+                menu_item,
+                requested_size=item.size.strip(),
+                quantity=item.quantity,
+            )
+        )
+
+    return order_service.create_member_order(
+        member_id=current_member.member_id,
+        store=store,
+        items=validated_items,
+        payment_method=body.payment_method,
+        tax_rate=settings.order_tax_rate,
+    )
 
 
 @router.get(
@@ -218,6 +292,10 @@ def member_dashboard(
     points_value = order_service.calculate_points(current_member.member_id)
     points = member_service.get_points(current_member.member_id, points_value)
     favorites = order_service.list_member_favorites(current_member.member_id, limit=10)
+    points_history = order_service.list_member_points_history(
+        current_member.member_id,
+        limit=min(limit, 25),
+    )
     orders = order_service.list_member_dashboard_orders(
         member_id=current_member.member_id,
         limit=limit,
@@ -235,5 +313,6 @@ def member_dashboard(
         points=points,
         orders=orders,
         favorites=favorites,
+        points_history=points_history,
         pagination=pagination,
     )

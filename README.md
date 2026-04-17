@@ -67,6 +67,12 @@ Use case: account settings and profile screen.
 Returns the authenticated member’s points balance.  
 Use case: profile and rewards widgets.
 
+### `GET /api/member/points/history`
+Returns a per-order breakdown of points earned, newest first.  
+Use case: rewards history section and “how did I earn these points?” views.
+
+Supports: `limit`.
+
 ### `GET /api/member/favorites`
 Returns the authenticated member’s favorite menu items.  
 Use case: profile and dashboard favorites section.
@@ -74,6 +80,15 @@ Use case: profile and dashboard favorites section.
 ### `GET /api/member/orders`
 Returns the authenticated member’s order history.  
 Use case: account order history views.
+
+### `POST /api/member/orders`
+Creates a new pickup order for the authenticated member with `pay_in_store` checkout.  
+Use case: cart submission and order confirmation for the customer app.
+
+Behavior notes:
+- validates the store and menu items before creating the order
+- computes subtotal, tax, total, and `points_earned`
+- returns a full order detail payload ready for a confirmation screen
 
 ### `GET /api/member/summary`
 Returns the authenticated member profile, points, recents, and favorites in one call.  
@@ -89,6 +104,9 @@ Dashboard response also includes:
 - `pagination` (limit/offset/total)
 - `points_earned` per order
 - `favorites`
+- `points_history`
+
+Order creation uses the configured `ORDER_TAX_RATE` environment variable, which defaults to `0.07`.
 
 ### `GET /members/{member_id}`
 Returns a member profile (name, email, home store, etc.).  

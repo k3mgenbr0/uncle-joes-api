@@ -28,6 +28,12 @@ class UnauthorizedError(Exception):
         super().__init__(detail)
 
 
+class BadRequestError(Exception):
+    def __init__(self, detail: str = "Bad request.") -> None:
+        self.detail = detail
+        super().__init__(detail)
+
+
 def _error_response(status_code: int, detail: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -48,6 +54,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(UnauthorizedError)
     async def handle_unauthorized(_: Request, exc: UnauthorizedError) -> JSONResponse:
         return _error_response(status.HTTP_401_UNAUTHORIZED, exc.detail)
+
+    @app.exception_handler(BadRequestError)
+    async def handle_bad_request(_: Request, exc: BadRequestError) -> JSONResponse:
+        return _error_response(status.HTTP_400_BAD_REQUEST, exc.detail)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(

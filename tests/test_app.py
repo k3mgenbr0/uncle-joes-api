@@ -20,6 +20,7 @@ from app.schemas.member import (
     MemberFavoriteItem,
     MemberFavoriteTrendPoint,
     MemberPoints,
+    MemberPointsHistoryEntry,
 )
 from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
 from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderQueryParams
@@ -176,8 +177,26 @@ class StubMemberService:
 
 
 class StubOrderService:
+    def __init__(self) -> None:
+        self.created_order: OrderDetail | None = None
+
+    def validate_order_item(
+        self,
+        menu_item: MenuItem,
+        *,
+        requested_size: str,
+        quantity: int,
+    ) -> dict:
+        return {
+            "menu_item_id": menu_item.item_id,
+            "item_name": menu_item.name,
+            "size": menu_item.size or requested_size,
+            "quantity": quantity,
+            "unit_price": menu_item.price,
+        }
+
     def list_member_orders(self, member_id: str, params: OrderQueryParams) -> list[Order]:
-        return [
+        orders = [
             Order(
                 order_id="order-1",
                 member_id=member_id,
@@ -185,6 +204,23 @@ class StubOrderService:
                 order_total=12.5,
             )
         ]
+        if self.created_order:
+            orders.insert(
+                0,
+                Order(
+                    order_id=self.created_order.order_id,
+                    member_id=member_id,
+                    store_id=self.created_order.store_id,
+                    order_date=self.created_order.order_date,
+                    items_subtotal=self.created_order.subtotal,
+                    order_discount=self.created_order.discount,
+                    order_subtotal=self.created_order.subtotal,
+                    sales_tax=self.created_order.tax,
+                    order_total=self.created_order.total,
+                    items=self.created_order.items,
+                ),
+            )
+        return orders
 
     def calculate_points(self, member_id: str) -> int:
         return 12
@@ -206,6 +242,23 @@ class StubOrderService:
             "total_revenue": 25.5,
             "avg_order_total": 8.5,
         }
+
+    def list_member_points_history(
+        self,
+        member_id: str,
+        limit: int,
+    ) -> list[MemberPointsHistoryEntry]:
+        return [
+            MemberPointsHistoryEntry(
+                order_id="order-3",
+                order_date="2026-04-12T13:15:00Z",
+                store_id="101",
+                store_city="Indianapolis",
+                store_state="IN",
+                order_total=9.75,
+                points_earned=9,
+            )
+        ][:limit]
 
     def list_location_daily_stats(self, store_id: str, limit: int) -> list[dict]:
         return [
@@ -234,7 +287,7 @@ class StubOrderService:
         offset: int,
         include_items: bool,
     ) -> list[DashboardOrder]:
-        return [
+        orders = [
             DashboardOrder(
                 order_id="order-3",
                 store_id="101",
@@ -245,11 +298,28 @@ class StubOrderService:
                 items=[],
             )
         ]
+        if self.created_order:
+            orders.insert(
+                0,
+                DashboardOrder(
+                    order_id=self.created_order.order_id,
+                    store_id=self.created_order.store_id,
+                    store_city=self.created_order.store_city,
+                    store_state=self.created_order.store_state,
+                    order_date=self.created_order.order_date,
+                    order_total=self.created_order.total,
+                    points_earned=self.created_order.points_earned,
+                    items=self.created_order.items,
+                ),
+            )
+        return orders
 
     def count_member_orders(self, member_id: str) -> int:
         return 1
 
     def get_order_detail(self, order_id: str) -> OrderDetail:
+        if self.created_order and self.created_order.order_id == order_id:
+            return self.created_order
         return OrderDetail(
             order_id=order_id,
             member_id="member-1",
@@ -266,6 +336,57 @@ class StubOrderService:
             items=[],
             payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8},
         )
+
+    def create_member_order(
+        self,
+        *,
+        member_id: str,
+        store,
+        items: list[dict],
+        payment_method: str,
+        tax_rate: float,
+    ) -> OrderDetail:
+        subtotal = round(sum(item["quantity"] * item["unit_price"] for item in items), 2)
+        tax = round(subtotal * tax_rate, 2)
+        total = round(subtotal + tax, 2)
+        self.created_order = OrderDetail(
+            order_id="order-new",
+            member_id=member_id,
+            store_id=store.location_id,
+            store_name=store.store_name,
+            store_city=store.city,
+            store_state=store.state,
+            order_date="2026-04-17T12:00:00Z",
+            subtotal=subtotal,
+            discount=0.0,
+            tax=tax,
+            total=total,
+            points_earned=int(total // 1),
+            points_redeemed=None,
+            items=[
+                {
+                    "order_item_id": f"item-{index}",
+                    "order_id": "order-new",
+                    "menu_item_id": item["menu_item_id"],
+                    "item_name": item["item_name"],
+                    "size": item["size"],
+                    "quantity": item["quantity"],
+                    "price": item["unit_price"],
+                    "unit_price": item["unit_price"],
+                    "line_total": round(item["quantity"] * item["unit_price"], 2),
+                }
+                for index, item in enumerate(items, start=1)
+            ],
+            payment_summary={
+                "subtotal": subtotal,
+                "discount": 0.0,
+                "tax": tax,
+                "total": total,
+                "method": payment_method,
+                "status": "pending",
+            },
+        )
+        return self.created_order
 
     def list_member_favorites(
         self,
@@ -363,14 +484,22 @@ class StubRecommendationsService:
 
 def build_test_client() -> TestClient:
     app = create_app()
-    app.dependency_overrides[get_location_service] = lambda: StubLocationService()
-    app.dependency_overrides[get_menu_service] = lambda: StubMenuService()
-    app.dependency_overrides[get_auth_service] = lambda: StubAuthService()
-    app.dependency_overrides[get_member_service] = lambda: StubMemberService()
-    app.dependency_overrides[get_order_service] = lambda: StubOrderService()
-    app.dependency_overrides[get_search_service] = lambda: StubSearchService()
-    app.dependency_overrides[get_stats_service] = lambda: StubStatsService()
-    app.dependency_overrides[get_recommendations_service] = lambda: StubRecommendationsService()
+    location_service = StubLocationService()
+    menu_service = StubMenuService()
+    auth_service = StubAuthService()
+    member_service = StubMemberService()
+    order_service = StubOrderService()
+    search_service = StubSearchService()
+    stats_service = StubStatsService()
+    recommendations_service = StubRecommendationsService()
+    app.dependency_overrides[get_location_service] = lambda: location_service
+    app.dependency_overrides[get_menu_service] = lambda: menu_service
+    app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_member_service] = lambda: member_service
+    app.dependency_overrides[get_order_service] = lambda: order_service
+    app.dependency_overrides[get_search_service] = lambda: search_service
+    app.dependency_overrides[get_stats_service] = lambda: stats_service
+    app.dependency_overrides[get_recommendations_service] = lambda: recommendations_service
     app.dependency_overrides[get_current_member] = lambda: Member(
         member_id="member-1",
         first_name="Joe",
@@ -584,6 +713,9 @@ def test_member_auth_session_endpoints() -> None:
     assert response.status_code == 200
     response = client.get("/api/member/points")
     assert response.status_code == 200
+    response = client.get("/api/member/points/history")
+    assert response.status_code == 200
+    assert response.json()[0]["points_earned"] == 9
     response = client.get("/api/member/favorites")
     assert response.status_code == 200
     response = client.get("/api/member/orders")
@@ -596,6 +728,7 @@ def test_member_auth_session_endpoints() -> None:
     assert "pagination" in payload
     assert payload["orders"][0]["points_earned"] >= 0
     assert isinstance(payload["favorites"], list)
+    assert isinstance(payload["points_history"], list)
     response = client.post("/api/member/logout")
     assert response.status_code == 200
 
@@ -607,3 +740,38 @@ def test_order_detail_endpoint() -> None:
     payload = response.json()
     assert payload["order_id"] == "order-1"
     assert isinstance(payload["items"], list)
+
+
+def test_create_member_order_endpoint() -> None:
+    client = build_test_client()
+    response = client.post(
+        "/api/member/orders",
+        json={
+            "store_id": "101",
+            "items": [
+                {
+                    "menu_item_id": "latte",
+                    "quantity": 2,
+                    "size": "Medium",
+                }
+            ],
+            "payment_method": "pay_in_store",
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["order_id"] == "order-new"
+    assert payload["payment_summary"]["method"] == "pay_in_store"
+    assert payload["payment_summary"]["status"] == "pending"
+
+    response = client.get("/api/member/orders")
+    assert response.status_code == 200
+    assert response.json()[0]["order_id"] == "order-new"
+
+    response = client.get("/api/member/dashboard")
+    assert response.status_code == 200
+    assert response.json()["orders"][0]["order_id"] == "order-new"
+
+    response = client.get("/orders/order-new")
+    assert response.status_code == 200
+    assert response.json()["order_id"] == "order-new"

@@ -33,6 +33,21 @@ class BigQueryRunner:
     def __init__(self, client: bigquery.Client) -> None:
         self._client = client
 
+    def execute(
+        self,
+        query: str,
+        parameters: list[bigquery.ScalarQueryParameter] | None = None,
+    ) -> None:
+        try:
+            job_config = bigquery.QueryJobConfig(query_parameters=parameters or [])
+            self._client.query(query, job_config=job_config).result()
+        except GoogleAPIError as exc:
+            logger.exception("BigQuery request failed")
+            raise DatabaseError() from exc
+        except Exception as exc:
+            logger.exception("Unexpected BigQuery failure")
+            raise DatabaseError() from exc
+
     def fetch_all(
         self,
         query: str,

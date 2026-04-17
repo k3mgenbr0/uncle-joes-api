@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,6 +59,20 @@ class PaymentSummary(BaseModel):
     discount: float | None = None
     tax: float | None = None
     total: float | None = None
+    method: str | None = None
+    status: str | None = None
+
+
+class CreateOrderItemRequest(BaseModel):
+    menu_item_id: str
+    quantity: int = Field(ge=1)
+    size: str
+
+
+class CreateOrderRequest(BaseModel):
+    store_id: str
+    items: list[CreateOrderItemRequest] = Field(min_length=1)
+    payment_method: Literal["pay_in_store"]
 
 
 class OrderDetail(BaseModel):

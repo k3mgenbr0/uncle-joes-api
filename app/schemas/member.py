@@ -35,6 +35,16 @@ class MemberPoints(BaseModel):
     total_points: int
 
 
+class MemberPointsHistoryEntry(BaseModel):
+    order_id: str
+    order_date: str | None = None
+    store_id: str | None = None
+    store_city: str | None = None
+    store_state: str | None = None
+    order_total: float | None = None
+    points_earned: int = 0
+
+
 class MemberFavoriteItem(BaseModel):
     menu_item_id: str
     item_name: str | None = None
@@ -64,4 +74,5 @@ class MemberDashboard(BaseModel):
     points: MemberPoints
     orders: list[DashboardOrder]
     favorites: list[MemberFavoriteItem] = Field(default_factory=list)
+    points_history: list[MemberPointsHistoryEntry] = Field(default_factory=list)
     pagination: dict | None = None

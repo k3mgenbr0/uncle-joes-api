@@ -1,8 +1,12 @@
 import logging
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from app.core.errors import NotFoundError
 from app.repositories.orders import OrderRepository
-from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint
+from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint, MemberPointsHistoryEntry
+from app.schemas.location import Location
+from app.schemas.menu import MenuItem
 from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderItem, OrderQueryParams, PaymentSummary
 
 
@@ -49,6 +53,14 @@ class OrderService:
 
     def calculate_points(self, member_id: str) -> int:
         return self._repository.get_member_points(member_id)
+
+    def list_member_points_history(
+        self,
+        member_id: str,
+        limit: int,
+    ) -> list[MemberPointsHistoryEntry]:
+        rows = self._repository.list_member_points_history(member_id, limit)
+        return [MemberPointsHistoryEntry.model_validate(row) for row in rows]
 
     def list_location_orders(self, store_id: str, params: OrderQueryParams) -> list[Order]:
         rows = self._repository.list_orders_for_store(
@@ -110,6 +122,64 @@ class OrderService:
     def count_member_orders(self, member_id: str) -> int:
         return self._repository.count_member_orders(member_id)
 
+    def create_member_order(
+        self,
+        *,
+        member_id: str,
+        store: Location,
+        items: list[dict],
+        payment_method: str,
+        tax_rate: float,
+    ) -> OrderDetail:
+        order_id = str(uuid4())
+        order_date = datetime.now(timezone.utc)
+        items_subtotal = round(
+            sum(item["quantity"] * item["unit_price"] for item in items),
+            2,
+        )
+        order_discount = 0.0
+        order_subtotal = round(items_subtotal - order_discount, 2)
+        sales_tax = round(order_subtotal * tax_rate, 2)
+        order_total = round(order_subtotal + sales_tax, 2)
+
+        self._repository.create_order(
+            order_id=order_id,
+            member_id=member_id,
+            store_id=store.location_id,
+            order_date=order_date,
+            items_subtotal=items_subtotal,
+            order_discount=order_discount,
+            order_subtotal=order_subtotal,
+            sales_tax=sales_tax,
+            order_total=order_total,
+        )
+        self._repository.create_order_items(
+            [
+                {
+                    "order_item_id": str(uuid4()),
+                    "order_id": order_id,
+                    "menu_item_id": item["menu_item_id"],
+                    "item_name": item["item_name"],
+                    "size": item["size"],
+                    "quantity": item["quantity"],
+                    "price": item["unit_price"],
+                }
+                for item in items
+            ]
+        )
+
+        detail = self.get_order_detail(order_id)
+        detail.payment_summary = PaymentSummary(
+            subtotal=detail.subtotal,
+            discount=detail.discount,
+            tax=detail.tax,
+            total=detail.total,
+            method=payment_method,
+            status="pending",
+        )
+        detail.store_name = store.store_name
+        return detail
+
     def get_order_detail(self, order_id: str) -> OrderDetail:
         row = self._repository.get_order_detail(order_id)
         if row is None:
@@ -128,6 +198,8 @@ class OrderService:
             discount=detail.discount,
             tax=detail.tax,
             total=detail.total,
+            method="pay_in_store",
+            status="pending",
         )
         return detail
 
@@ -174,3 +246,19 @@ class OrderService:
         else:
             item.line_total = None
         return item
+
+    @staticmethod
+    def validate_order_item(
+        menu_item: MenuItem,
+        *,
+        requested_size: str,
+        quantity: int,
+    ) -> dict:
+        canonical_size = menu_item.size or requested_size
+        return {
+            "menu_item_id": menu_item.item_id,
+            "item_name": menu_item.name,
+            "size": canonical_size,
+            "quantity": quantity,
+            "unit_price": menu_item.price,
+        }

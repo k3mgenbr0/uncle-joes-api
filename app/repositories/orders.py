@@ -144,6 +144,35 @@ class OrderRepository:
         row = self._runner.fetch_one(query, params) or {"total_points": 0}
         return int(row["total_points"] or 0)
 
+    def list_member_points_history(self, member_id: str, limit: int) -> list[dict]:
+        query = f"""
+            SELECT
+                CAST(o.{self._order_id_column} AS STRING) AS order_id,
+                CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
+                CAST(l.{self._location_city_column} AS STRING) AS store_city,
+                CAST(l.{self._location_state_column} AS STRING) AS store_state,
+                CAST(o.{self._order_date_column} AS STRING) AS order_date,
+                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS order_total,
+                CAST(
+                    COALESCE(
+                        FLOOR(SAFE_CAST(o.{self._order_total_column} AS FLOAT64)),
+                        0
+                    ) AS INT64
+                ) AS points_earned
+            FROM {self._orders_table} AS o
+            LEFT JOIN {self._locations_table} AS l
+                ON CAST(o.{self._order_store_id_column} AS STRING)
+                    = CAST(l.{self._location_id_column} AS STRING)
+            WHERE CAST(o.{self._order_member_id_column} AS STRING) = @member_id
+            ORDER BY o.{self._order_date_column} DESC
+            LIMIT @limit
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        ]
+        return self._runner.fetch_all(query, params)
+
     def get_member_first_order_date(self, member_id: str) -> str | None:
         query = f"""
             SELECT CAST(MIN(DATE({self._order_date_column})) AS STRING) AS join_date
@@ -340,6 +369,89 @@ class OrderRepository:
         """
         params = [bigquery.ScalarQueryParameter("order_id", "STRING", order_id)]
         return self._runner.fetch_one(query, params)
+
+    def create_order(
+        self,
+        *,
+        order_id: str,
+        member_id: str,
+        store_id: str,
+        order_date,
+        items_subtotal: float,
+        order_discount: float,
+        order_subtotal: float,
+        sales_tax: float,
+        order_total: float,
+    ) -> None:
+        query = f"""
+            INSERT INTO {self._orders_table} (
+                {self._order_id_column},
+                {self._order_member_id_column},
+                {self._order_store_id_column},
+                {self._order_date_column},
+                {self._items_subtotal_column},
+                {self._order_discount_column},
+                {self._order_subtotal_column},
+                {self._sales_tax_column},
+                {self._order_total_column}
+            )
+            VALUES (
+                @order_id,
+                @member_id,
+                @store_id,
+                @order_date,
+                @items_subtotal,
+                @order_discount,
+                @order_subtotal,
+                @sales_tax,
+                @order_total
+            )
+        """
+        params = [
+            bigquery.ScalarQueryParameter("order_id", "STRING", order_id),
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("store_id", "STRING", store_id),
+            bigquery.ScalarQueryParameter("order_date", "TIMESTAMP", order_date),
+            bigquery.ScalarQueryParameter("items_subtotal", "FLOAT64", items_subtotal),
+            bigquery.ScalarQueryParameter("order_discount", "FLOAT64", order_discount),
+            bigquery.ScalarQueryParameter("order_subtotal", "FLOAT64", order_subtotal),
+            bigquery.ScalarQueryParameter("sales_tax", "FLOAT64", sales_tax),
+            bigquery.ScalarQueryParameter("order_total", "FLOAT64", order_total),
+        ]
+        self._runner.execute(query, params)
+
+    def create_order_items(self, items: list[dict]) -> None:
+        for item in items:
+            query = f"""
+                INSERT INTO {self._order_items_table} (
+                    {self._order_item_id_column},
+                    {self._order_item_order_id_column},
+                    {self._order_item_menu_item_id_column},
+                    {self._order_item_name_column},
+                    {self._order_item_size_column},
+                    {self._order_item_quantity_column},
+                    {self._order_item_price_column}
+                )
+                VALUES (
+                    @order_item_id,
+                    @order_id,
+                    @menu_item_id,
+                    @item_name,
+                    @size,
+                    @quantity,
+                    @price
+                )
+            """
+            params = [
+                bigquery.ScalarQueryParameter("order_item_id", "STRING", item["order_item_id"]),
+                bigquery.ScalarQueryParameter("order_id", "STRING", item["order_id"]),
+                bigquery.ScalarQueryParameter("menu_item_id", "STRING", item["menu_item_id"]),
+                bigquery.ScalarQueryParameter("item_name", "STRING", item["item_name"]),
+                bigquery.ScalarQueryParameter("size", "STRING", item["size"]),
+                bigquery.ScalarQueryParameter("quantity", "INT64", item["quantity"]),
+                bigquery.ScalarQueryParameter("price", "FLOAT64", item["price"]),
+            ]
+            self._runner.execute(query, params)
 
     def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
         sort_map = {
