@@ -52,6 +52,9 @@ class Location(BaseModel):
     holiday_hours: list[HolidayHours] = Field(default_factory=list)
     pickup_supported: bool | None = None
     dine_in_supported: bool | None = None
+    ordering_available: bool = False
+    availability_status: str = "coming_soon"
+    availability_message: str | None = None
 
 
 class LocationSummary(BaseModel):
@@ -70,5 +73,6 @@ class LocationQueryParams(BaseModel):
     wifi: bool | None = None
     drive_thru: bool | None = None
     door_dash: bool | None = None
+    orderable_only: bool = False
     limit: int = Field(default=500, ge=1, le=500)
     offset: int = Field(default=0, ge=0)

@@ -15,7 +15,15 @@ This backend powers the Uncle Joe’s Coffee Shop app. It connects to Google Big
 Lists store locations.  
 Use case: store locator page and filtering.
 
-Supports: `state`, `city`, `open_for_business`, `wifi`, `drive_thru`, `door_dash`, `limit`, `offset`.
+Supports: `state`, `city`, `open_for_business`, `orderable_only`, `wifi`, `drive_thru`, `door_dash`, `limit`, `offset`.
+
+Availability notes:
+- `open_for_business` is the single source of truth for whether a store can accept orders
+- stores where `open_for_business !== true` return:
+  - `ordering_available: false`
+  - `availability_status: "coming_soon"`
+  - `availability_message: "Coming Soon!"`
+- use `orderable_only=true` for pickup-store dropdowns and other ordering UIs
 
 ### `GET /locations/{location_id}`
 Returns one location by ID.  
@@ -192,8 +200,8 @@ Returns menu items annotated for a specific pickup location.
 Use case: store-aware ordering and pickup-store menu filtering.
 
 Current availability behavior is static:
-- if the location supports pickup, returned items are marked available
-- if the location does not support pickup, returned items are marked unavailable
+- if `open_for_business === true`, returned items are marked available
+- otherwise, returned items are marked unavailable and the store should be treated as coming soon
 
 ### `GET /locations/{location_id}/stats`
 Returns store‑level totals: total orders, total revenue, and average order value.  

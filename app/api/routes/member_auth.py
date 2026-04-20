@@ -323,8 +323,8 @@ def create_member_order(
     settings: Settings = Depends(get_settings),
 ) -> OrderDetail:
     store = location_service.get_location(body.store_id)
-    if store.pickup_supported is False:
-        raise BadRequestError("Pickup is not available at this location.")
+    if not store.ordering_available:
+        raise BadRequestError("This store is not yet open for ordering. Coming Soon!")
     candidate_pickup_time = body.pickup_time or (
         datetime.now(timezone.utc) + timedelta(minutes=settings.order_default_prep_minutes)
     )

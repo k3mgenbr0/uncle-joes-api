@@ -25,7 +25,10 @@ class LocationService:
             params.offset,
             len(rows),
         )
-        return [self._enrich(Location.model_validate(row)) for row in rows]
+        locations = [self._enrich(Location.model_validate(row)) for row in rows]
+        if params.orderable_only:
+            locations = [location for location in locations if location.ordering_available]
+        return locations
 
     def get_location(self, location_id: str) -> Location:
         row = self._repository.get_location(location_id)
@@ -89,8 +92,17 @@ class LocationService:
         location.store_name = f"Uncle Joe's {location.city}" if location.city else None
         location.services = self._services(location)
         location.holiday_hours = []
-        location.pickup_supported = self._pickup_supported(location)
+        # `open_for_business` is the single source of truth for whether a store can
+        # be surfaced as orderable in both backend validation and frontend UX.
+        location.pickup_supported = self._is_orderable(location)
         location.dine_in_supported = None
+        location.ordering_available = self._is_orderable(location)
+        if location.ordering_available:
+            location.availability_status = "open"
+            location.availability_message = None
+        else:
+            location.availability_status = "coming_soon"
+            location.availability_message = "Coming Soon!"
         return location
 
     @staticmethod
@@ -164,7 +176,7 @@ class LocationService:
         return services
 
     @staticmethod
-    def _pickup_supported(location: Location) -> bool | None:
-        if location.open_for_business is None and location.drive_thru is None and location.door_dash is None:
-            return None
-        return bool(location.open_for_business or location.drive_thru or location.door_dash)
+    def _is_orderable(location: Location) -> bool:
+        # Treat null, missing, or invalid values as unavailable. Only an explicit
+        # boolean True allows ordering.
+        return location.open_for_business is True

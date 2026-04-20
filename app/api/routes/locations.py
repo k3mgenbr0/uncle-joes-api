@@ -26,6 +26,7 @@ def list_locations(
     state: Annotated[str | None, Query(min_length=2, max_length=64)] = None,
     city: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     open_for_business: Annotated[bool | None, Query()] = None,
+    orderable_only: Annotated[bool, Query()] = False,
     wifi: Annotated[bool | None, Query()] = None,
     drive_thru: Annotated[bool | None, Query()] = None,
     door_dash: Annotated[bool | None, Query()] = None,
@@ -37,6 +38,7 @@ def list_locations(
         state=state,
         city=city,
         open_for_business=open_for_business,
+        orderable_only=orderable_only,
         wifi=wifi,
         drive_thru=drive_thru,
         door_dash=door_dash,
@@ -87,7 +89,7 @@ def get_location_menu(
         limit=limit,
         offset=offset,
     )
-    store_available = bool(location.pickup_supported)
+    store_available = location.ordering_available
     return menu_service.list_menu_items_for_store(params, store_available=store_available)
 
 

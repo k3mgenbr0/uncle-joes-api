@@ -36,7 +36,7 @@ from app.services.orders import OrderService
 
 class StubLocationService:
     def list_locations(self, params: LocationQueryParams) -> list[Location]:
-        return [
+        locations = [
             Location(
                 location_id="101",
                 city=params.city or "Indianapolis",
@@ -57,10 +57,51 @@ class StubLocationService:
                 store_name="Uncle Joe's Indianapolis",
                 services=["wifi", "door_dash", "in_store"],
                 pickup_supported=True,
+                ordering_available=True,
+                availability_status="open",
             )
         ]
+        if params.orderable_only:
+            return [location for location in locations if location.ordering_available]
+        return locations
 
     def get_location(self, location_id: str) -> Location:
+        if location_id == "999":
+            return Location(
+                location_id=location_id,
+                city="Coming Soon City",
+                state="IN",
+                postal_code="46204",
+                address_one="999 Future Rd",
+                map_address="999 Future Rd, Coming Soon City, IN 46204",
+                phone="317-555-0999",
+                email="store999@example.com",
+                latitude=39.7,
+                longitude=-86.1,
+                near_by="Future Plaza",
+                open_for_business=False,
+                wifi=False,
+                drive_thru=False,
+                door_dash=False,
+                full_address="999 Future Rd, Coming Soon City, IN, 46204",
+                hours={
+                    "monday": {"open": None, "close": None},
+                    "tuesday": {"open": None, "close": None},
+                    "wednesday": {"open": None, "close": None},
+                    "thursday": {"open": None, "close": None},
+                    "friday": {"open": None, "close": None},
+                    "saturday": {"open": None, "close": None},
+                    "sunday": {"open": None, "close": None},
+                },
+                hours_today={"open": None, "close": None},
+                open_now=False,
+                store_name="Uncle Joe's Coming Soon City",
+                services=[],
+                pickup_supported=False,
+                ordering_available=False,
+                availability_status="coming_soon",
+                availability_message="Coming Soon!",
+            )
         return Location(
             location_id=location_id,
             city="Indianapolis",
@@ -92,6 +133,8 @@ class StubLocationService:
             store_name="Uncle Joe's Indianapolis",
             services=["wifi", "door_dash", "in_store"],
             pickup_supported=True,
+            ordering_available=True,
+            availability_status="open",
         )
 
     def validate_pickup_time(self, location: Location, pickup_time, *, buffer_minutes: int = 10) -> None:
@@ -681,6 +724,9 @@ def test_list_locations_supports_filters() -> None:
     payload = response.json()
     assert payload[0]["state"] == "IN"
     assert payload[0]["city"] == "Indianapolis"
+    response = client.get("/locations", params={"orderable_only": True})
+    assert response.status_code == 200
+    assert all(item["ordering_available"] is True for item in response.json())
 
 
 def test_get_menu_item() -> None:
@@ -749,9 +795,16 @@ def test_location_orders_and_stats_endpoints() -> None:
     response = client.get("/locations/101")
     assert response.status_code == 200
     assert "store_name" in response.json()
+    assert response.json()["ordering_available"] is True
+    response = client.get("/locations/999")
+    assert response.status_code == 200
+    assert response.json()["availability_message"] == "Coming Soon!"
     response = client.get("/locations/101/menu")
     assert response.status_code == 200
     assert response.json()[0]["available_at_store"] is True
+    response = client.get("/locations/999/menu")
+    assert response.status_code == 200
+    assert response.json()[0]["available_at_store"] is False
     response = client.get("/locations/101/orders")
     assert response.status_code == 200
     assert response.json()[0]["order_id"] == "order-2"
@@ -911,6 +964,17 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/orders/order-new")
     assert response.status_code == 200
     assert response.json()["order_id"] == "order-new"
+
+    response = client.post(
+        "/api/member/orders",
+        json={
+            "store_id": "999",
+            "items": [{"menu_item_id": "latte", "quantity": 1, "size": "Medium"}],
+            "payment_method": "pay_in_store",
+        },
+    )
+    assert response.status_code == 400
+    assert "Coming Soon" in response.json()["detail"]
 
 
 def test_pickup_time_validation_uses_store_local_hours() -> None:
