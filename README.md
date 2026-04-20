@@ -9,6 +9,13 @@ This backend powers the Uncle Joe’s Coffee Shop app. It connects to Google Big
 - **Members + Orders**: login, profile lookup, order history, and loyalty points
 - **Search + Stats**: search across locations and menu, plus analytics endpoints
 
+Frontend-facing backend behaviors:
+- session-based member auth with secure cookies
+- pickup ordering with pay-at-store checkout
+- store-aware ordering rules driven by `open_for_business`
+- pickup-time validation against store-local hours
+- order progress fields for confirmation and history screens
+
 ## API Endpoints (Core Section)
 
 ### `GET /locations`
@@ -24,6 +31,7 @@ Availability notes:
   - `availability_status: "coming_soon"`
   - `availability_message: "Coming Soon!"`
 - use `orderable_only=true` for pickup-store dropdowns and other ordering UIs
+- unavailable stores should still render on the location page, but must not be used for ordering
 
 ### `GET /locations/{location_id}`
 Returns one location by ID.  
@@ -58,6 +66,12 @@ Behavior notes:
 ### `POST /api/member/login`
 Starts a member session and sets a secure, HTTP‑only cookie.  
 Use case: login for the member dashboard.
+
+Cookie behavior for deployed frontend use:
+- `HttpOnly`
+- `Secure`
+- `SameSite=None`
+- `Path=/`
 
 ### `POST /api/member/logout`
 Clears the member session cookie.  
@@ -109,6 +123,7 @@ Behavior notes:
 - validates the store and menu items before creating the order
 - validates pickup time against the store’s posted hours in store-local time
 - rejects pickup times outside the valid window with a precise message
+- blocks ordering when `open_for_business !== true`
 - computes subtotal, tax, total, and `points_earned`
 - returns a full order detail payload ready for a confirmation screen
 
@@ -120,6 +135,14 @@ Order fields now include:
 - `estimated_prep_minutes`
 - `special_instructions`
 - nested location summary and store phone when available
+
+Pickup validation notes:
+- `pickup_time` should be sent as ISO 8601
+- validation uses the selected store’s local business hours
+- the backend returns precise errors such as:
+  - `Pickup time must be between 5:30 AM and 8:00 PM for this store.`
+  - `This store is closed on Monday.`
+  - `This store is not yet open for ordering. Coming Soon!`
 
 ### `GET /api/member/orders/{order_id}`
 Returns one order for the authenticated member using the session-first member API.  
@@ -140,6 +163,16 @@ Dashboard response also includes:
 - `points_earned` per order
 - `favorites`
 - `points_history`
+
+Dashboard and order-history responses include order-progress fields such as:
+- `pickup_time`
+- `ready_by_estimate`
+- `submitted_at`
+- `order_status`
+- `estimated_prep_minutes`
+- `special_instructions`
+- `store_phone`
+- `items` as an array, even when empty
 
 Order status values:
 - `order_received`
@@ -202,6 +235,10 @@ Use case: store-aware ordering and pickup-store menu filtering.
 Current availability behavior is static:
 - if `open_for_business === true`, returned items are marked available
 - otherwise, returned items are marked unavailable and the store should be treated as coming soon
+
+Returned menu items may include:
+- `available_at_store`
+- `store_availability_status`
 
 ### `GET /locations/{location_id}/stats`
 Returns store‑level totals: total orders, total revenue, and average order value.  
@@ -271,6 +308,10 @@ Health checks for uptime and BigQuery connectivity.
 - Cloud Run ready
 - CORS enabled for frontend use
 - Cookie-based member sessions
+- Pickup ordering with pay-in-store checkout
+- Store availability enforcement from `open_for_business`
+- Explicit favorites write support
+- Pickup-time validation against store-local hours
 - Swagger docs at `/docs`
 - Filtering, pagination, sorting, fuzzy search
 - Store and global stats endpoints
@@ -289,3 +330,4 @@ Frontend/CORS notes:
 - Open docs: `http://127.0.0.1:8000/docs`
 - A frontend should call the endpoints above to fetch data for pages, search, and dashboards.
 - Member endpoints under `/api/member` set and read an HTTP‑only session cookie.
+- Browser-based member requests should use `credentials: "include"` so the session cookie is sent.
