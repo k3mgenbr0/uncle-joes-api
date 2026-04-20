@@ -323,16 +323,28 @@ def create_member_order(
     settings: Settings = Depends(get_settings),
 ) -> OrderDetail:
     store = location_service.get_location(body.store_id)
+    logger = __import__("logging").getLogger(__name__)
+    logger.info(
+        "Create order request member_id=%s store_id=%s item_ids=%s pickup_time=%s",
+        current_member.member_id,
+        body.store_id,
+        [item.menu_item_id for item in body.items],
+        body.pickup_time.isoformat() if body.pickup_time else None,
+    )
     if not store.ordering_available:
         raise BadRequestError("This store is not yet open for ordering. Coming Soon!")
-    candidate_pickup_time = body.pickup_time or (
-        datetime.now(timezone.utc) + timedelta(minutes=settings.order_default_prep_minutes)
-    )
-    normalized_pickup_time = location_service.validate_pickup_time(store, candidate_pickup_time)
+    normalized_pickup_time = None
+    if body.pickup_time is not None:
+        normalized_pickup_time = location_service.validate_pickup_time(store, body.pickup_time)
 
     validated_items: list[dict] = []
     for item in body.items:
-        menu_item = menu_service.get_menu_item(item.menu_item_id)
+        menu_item = menu_service.get_menu_item_for_store(
+            item.menu_item_id,
+            store_available=store.ordering_available,
+        )
+        if menu_item.available_at_store is not True:
+            raise BadRequestError("Selected menu item is not available at this store.")
         if menu_item.size and menu_item.size.lower() != item.size.strip().lower():
             raise BadRequestError(
                 f"Size '{item.size}' is not available for menu item '{item.menu_item_id}'."

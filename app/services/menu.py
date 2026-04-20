@@ -59,6 +59,17 @@ class MenuService:
             item.store_availability_status = "available" if store_available else "unavailable"
         return items
 
+    def get_menu_item_for_store(
+        self,
+        item_id: str,
+        *,
+        store_available: bool,
+    ) -> MenuItem:
+        item = self.get_menu_item(item_id)
+        item.available_at_store = store_available
+        item.store_availability_status = "available" if store_available else "unavailable"
+        return item
+
     def get_menu_item_stats(self, item_id: str, window_days: int | None = None) -> MenuItemStats:
         if self._repository.get_menu_item(item_id) is None:
             raise NotFoundError(f"Menu item '{item_id}' was not found.")

@@ -138,6 +138,7 @@ Order fields now include:
 
 Pickup validation notes:
 - `pickup_time` should be sent as ISO 8601
+- `pickup_time` is optional; if omitted, the backend accepts the order and computes a ready estimate automatically
 - validation uses the selected store’s local business hours
 - the backend returns precise errors such as:
   - `Pickup time must be between 5:30 AM and 8:00 PM for this store.`

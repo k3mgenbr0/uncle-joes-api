@@ -170,6 +170,17 @@ class StubMenuService:
             availability_status="available",
         )
 
+    def get_menu_item_for_store(
+        self,
+        item_id: str,
+        *,
+        store_available: bool,
+    ) -> MenuItem:
+        item = self.get_menu_item(item_id)
+        item.available_at_store = store_available
+        item.store_availability_status = "available" if store_available else "unavailable"
+        return item
+
     def list_categories(self) -> list[str]:
         return ["Coffee", "Tea"]
 
@@ -964,6 +975,16 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/orders/order-new")
     assert response.status_code == 200
     assert response.json()["order_id"] == "order-new"
+
+    response = client.post(
+        "/api/member/orders",
+        json={
+            "store_id": "101",
+            "items": [{"menu_item_id": "latte", "quantity": 1, "size": "Medium"}],
+            "payment_method": "pay_in_store",
+        },
+    )
+    assert response.status_code == 201
 
     response = client.post(
         "/api/member/orders",
