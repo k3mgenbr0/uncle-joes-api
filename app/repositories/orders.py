@@ -48,6 +48,9 @@ class OrderRepository:
         self._menu_price_column = quote_column(settings.menu_price_column)
         self._order_metadata_ready_by_expr = "COALESCE(m.ready_by_estimate, m.pickup_time)"
 
+    def _qualified_order_column(self, column: str) -> str:
+        return f"o.{column}"
+
     def list_orders_for_member(
         self,
         member_id: str,
@@ -635,13 +638,16 @@ class OrderRepository:
 
     def _resolve_sort(self, sort_by: str | None, sort_dir: str) -> str:
         sort_map = {
-            "order_date": self._order_date_column,
-            "order_total": f"SAFE_CAST({self._order_total_column} AS FLOAT64)",
-            "order_id": self._order_id_column,
+            "order_date": self._qualified_order_column(self._order_date_column),
+            "order_total": f"SAFE_CAST({self._qualified_order_column(self._order_total_column)} AS FLOAT64)",
+            "order_id": self._qualified_order_column(self._order_id_column),
         }
-        column = sort_map.get((sort_by or "order_date").lower(), self._order_date_column)
+        column = sort_map.get(
+            (sort_by or "order_date").lower(),
+            self._qualified_order_column(self._order_date_column),
+        )
         direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
-        return f"{column} {direction}, {self._order_id_column} DESC"
+        return f"{column} {direction}, {self._qualified_order_column(self._order_id_column)} DESC"
 
     def _list_orders(
         self,
@@ -657,18 +663,18 @@ class OrderRepository:
         order_by = self._resolve_sort(sort_by, sort_dir)
         query = f"""
             SELECT
-                CAST({self._order_id_column} AS STRING) AS order_id,
-                CAST({self._order_member_id_column} AS STRING) AS member_id,
-                CAST({self._order_store_id_column} AS STRING) AS store_id,
+                CAST(o.{self._order_id_column} AS STRING) AS order_id,
+                CAST(o.{self._order_member_id_column} AS STRING) AS member_id,
+                CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
                 CAST(l.{self._location_city_column} AS STRING) AS store_city,
                 CAST(l.{self._location_state_column} AS STRING) AS store_state,
                 CAST(l.{self._location_phone_column} AS STRING) AS store_phone,
-                {self._order_date_column} AS order_date,
-                SAFE_CAST({self._items_subtotal_column} AS FLOAT64) AS items_subtotal,
-                SAFE_CAST({self._order_discount_column} AS FLOAT64) AS order_discount,
-                SAFE_CAST({self._order_subtotal_column} AS FLOAT64) AS order_subtotal,
-                SAFE_CAST({self._sales_tax_column} AS FLOAT64) AS sales_tax,
-                SAFE_CAST({self._order_total_column} AS FLOAT64) AS order_total,
+                o.{self._order_date_column} AS order_date,
+                SAFE_CAST(o.{self._items_subtotal_column} AS FLOAT64) AS items_subtotal,
+                SAFE_CAST(o.{self._order_discount_column} AS FLOAT64) AS order_discount,
+                SAFE_CAST(o.{self._order_subtotal_column} AS FLOAT64) AS order_subtotal,
+                SAFE_CAST(o.{self._sales_tax_column} AS FLOAT64) AS sales_tax,
+                SAFE_CAST(o.{self._order_total_column} AS FLOAT64) AS order_total,
                 m.pickup_time AS pickup_time,
                 {self._order_metadata_ready_by_expr} AS ready_by_estimate,
                 m.submitted_at AS submitted_at,
@@ -681,7 +687,7 @@ class OrderRepository:
                     = CAST(l.{self._location_id_column} AS STRING)
             LEFT JOIN {self._order_metadata_table} AS m
                 ON CAST(o.{self._order_id_column} AS STRING) = CAST(m.order_id AS STRING)
-            WHERE CAST({filter_column} AS STRING) = @{filter_param_name}
+            WHERE CAST(o.{filter_column} AS STRING) = @{filter_param_name}
             ORDER BY {order_by}
             LIMIT @limit OFFSET @offset
         """

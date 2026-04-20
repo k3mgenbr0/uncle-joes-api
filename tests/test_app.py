@@ -1019,6 +1019,17 @@ def test_pickup_time_validation_uses_store_local_hours() -> None:
         raise AssertionError("Expected pickup validation to fail outside store hours.")
 
 
+def test_parse_time_supports_bigquery_hour_strings() -> None:
+    parsed_open = LocationService._parse_time("530")
+    parsed_close = LocationService._parse_time("2000")
+    assert parsed_open is not None
+    assert parsed_open.hour == 5
+    assert parsed_open.minute == 30
+    assert parsed_close is not None
+    assert parsed_close.hour == 20
+    assert parsed_close.minute == 0
+
+
 def test_order_service_include_items_falls_back_to_empty_arrays() -> None:
     class FailingOrderRepository:
         def list_orders_for_member(self, **kwargs):

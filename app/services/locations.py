@@ -126,9 +126,15 @@ class LocationService:
     def _parse_time(value: str | None) -> time | None:
         if not value:
             return None
+        normalized = value.strip()
+        if normalized.isdigit():
+            if len(normalized) == 3:
+                normalized = f"0{normalized}"
+            if len(normalized) == 4:
+                normalized = f"{normalized[:2]}:{normalized[2:]}"
         for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
             try:
-                return datetime.strptime(value.strip(), fmt).time()
+                return datetime.strptime(normalized, fmt).time()
             except ValueError:
                 continue
         return None
