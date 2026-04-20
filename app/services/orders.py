@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.core.errors import NotFoundError
+from app.core.errors import DatabaseError, NotFoundError
 from app.schemas.location import LocationSummary
 from app.repositories.orders import OrderRepository
 from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint, MemberPointsHistoryEntry
@@ -29,24 +29,10 @@ class OrderService:
         orders = [Order.model_validate(row) for row in rows]
 
         if params.include_items:
-            order_ids = [order.order_id for order in orders]
-            items_rows = self._repository.list_order_items(order_ids)
-            items_by_order: dict[str, list[OrderItem]] = {}
-            for item_row in items_rows:
-                order_id = item_row.get("order_id")
-                if order_id is None:
-                    continue
-                items_by_order.setdefault(order_id, []).append(
-                    self._enrich_order_item(OrderItem.model_validate(item_row))
-                )
+            items_by_order = self._load_order_items([order.order_id for order in orders])
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
-        for order in orders:
-            if order.order_status not in {"completed", "cancelled"}:
-                order.order_status = self._progress_status(
-                    order.submitted_at,
-                    order.ready_by_estimate,
-                )
+        self._hydrate_orders(orders)
 
         logger.info(
             "Fetched orders member_id=%s limit=%s offset=%s count=%s include_items=%s",
@@ -79,24 +65,10 @@ class OrderService:
         )
         orders = [Order.model_validate(row) for row in rows]
         if params.include_items:
-            order_ids = [order.order_id for order in orders]
-            items_rows = self._repository.list_order_items(order_ids)
-            items_by_order: dict[str, list[OrderItem]] = {}
-            for item_row in items_rows:
-                order_id = item_row.get("order_id")
-                if order_id is None:
-                    continue
-                items_by_order.setdefault(order_id, []).append(
-                    self._enrich_order_item(OrderItem.model_validate(item_row))
-                )
+            items_by_order = self._load_order_items([order.order_id for order in orders])
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
-        for order in orders:
-            if order.order_status not in {"completed", "cancelled"}:
-                order.order_status = self._progress_status(
-                    order.submitted_at,
-                    order.ready_by_estimate,
-                )
+        self._hydrate_orders(orders)
         return orders
 
     def list_member_dashboard_orders(
@@ -113,16 +85,7 @@ class OrderService:
         )
         orders = [DashboardOrder.model_validate(row) for row in rows]
         if include_items:
-            order_ids = [order.order_id for order in orders]
-            items_rows = self._repository.list_order_items(order_ids)
-            items_by_order: dict[str, list[OrderItem]] = {}
-            for item_row in items_rows:
-                order_id = item_row.get("order_id")
-                if order_id is None:
-                    continue
-                items_by_order.setdefault(order_id, []).append(
-                    self._enrich_order_item(OrderItem.model_validate(item_row))
-                )
+            items_by_order = self._load_order_items([order.order_id for order in orders])
             for order in orders:
                 order.items = items_by_order.get(order.order_id, [])
         for order in orders:
@@ -229,11 +192,7 @@ class OrderService:
         if row is None:
             raise NotFoundError(f"Order '{order_id}' was not found.")
         detail = OrderDetail.model_validate(row)
-        item_rows = self._repository.list_order_items([order_id])
-        detail.items = [
-            self._enrich_order_item(OrderItem.model_validate(item_row))
-            for item_row in item_rows
-        ]
+        detail.items = self._load_order_items([order_id]).get(order_id, [])
         detail.points_earned = int(detail.total // 1) if detail.total is not None else 0
         detail.points_redeemed = 0
         detail.store_name = f"Uncle Joe's {detail.store_city}" if detail.store_city else None
@@ -381,3 +340,45 @@ class OrderService:
         ]
         cleaned = [part for part in parts if part]
         return ", ".join(cleaned) if cleaned else None
+
+    def _load_order_items(self, order_ids: list[str]) -> dict[str, list[OrderItem]]:
+        items_by_order: dict[str, list[OrderItem]] = {order_id: [] for order_id in order_ids if order_id}
+        if not order_ids:
+            return items_by_order
+        try:
+            item_rows = self._repository.list_order_items(order_ids)
+        except DatabaseError:
+            logger.warning("Bulk order-item lookup failed; falling back to per-order fetch.")
+            item_rows = []
+            for order_id in order_ids:
+                try:
+                    item_rows.extend(self._repository.list_order_items([order_id]))
+                except DatabaseError:
+                    logger.warning("Order-item lookup failed for order_id=%s; returning empty items.", order_id)
+        for item_row in item_rows:
+            order_id = item_row.get("order_id")
+            if order_id is None:
+                continue
+            item = self._safe_order_item(item_row)
+            if item:
+                items_by_order.setdefault(order_id, []).append(item)
+        return items_by_order
+
+    def _hydrate_orders(self, orders: list[Order]) -> None:
+        for order in orders:
+            order.points_earned = int(order.order_total // 1) if order.order_total is not None else 0
+            order.points_redeemed = 0
+            if not order.store_name and order.store_city:
+                order.store_name = f"Uncle Joe's {order.store_city}"
+            if order.order_status not in {"completed", "cancelled"}:
+                order.order_status = self._progress_status(
+                    order.submitted_at,
+                    order.ready_by_estimate,
+                )
+
+    def _safe_order_item(self, item_row: dict) -> OrderItem | None:
+        try:
+            return self._enrich_order_item(OrderItem.model_validate(item_row))
+        except Exception:
+            logger.warning("Skipping malformed order item row=%s", item_row)
+            return None

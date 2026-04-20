@@ -99,8 +99,8 @@ Use case: cart submission and order confirmation for the customer app.
 
 Behavior notes:
 - validates the store and menu items before creating the order
-- validates pickup time against store hours
-- blocks pickup within 10 minutes of opening or 10 minutes of closing
+- validates pickup time against the store’s posted hours in store-local time
+- rejects pickup times outside the valid window with a precise message
 - computes subtotal, tax, total, and `points_earned`
 - returns a full order detail payload ready for a confirmation screen
 

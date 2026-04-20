@@ -660,6 +660,9 @@ class OrderRepository:
                 CAST({self._order_id_column} AS STRING) AS order_id,
                 CAST({self._order_member_id_column} AS STRING) AS member_id,
                 CAST({self._order_store_id_column} AS STRING) AS store_id,
+                CAST(l.{self._location_city_column} AS STRING) AS store_city,
+                CAST(l.{self._location_state_column} AS STRING) AS store_state,
+                CAST(l.{self._location_phone_column} AS STRING) AS store_phone,
                 {self._order_date_column} AS order_date,
                 SAFE_CAST({self._items_subtotal_column} AS FLOAT64) AS items_subtotal,
                 SAFE_CAST({self._order_discount_column} AS FLOAT64) AS order_discount,
@@ -673,6 +676,9 @@ class OrderRepository:
                 SAFE_CAST(m.estimated_prep_minutes AS INT64) AS estimated_prep_minutes,
                 CAST(m.special_instructions AS STRING) AS special_instructions
             FROM {self._orders_table} AS o
+            LEFT JOIN {self._locations_table} AS l
+                ON CAST(o.{self._order_store_id_column} AS STRING)
+                    = CAST(l.{self._location_id_column} AS STRING)
             LEFT JOIN {self._order_metadata_table} AS m
                 ON CAST(o.{self._order_id_column} AS STRING) = CAST(m.order_id AS STRING)
             WHERE CAST({filter_column} AS STRING) = @{filter_param_name}

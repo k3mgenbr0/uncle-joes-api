@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from app.core.errors import BadRequestError, NotFoundError
 from app.repositories.locations import LocationRepository
@@ -7,6 +8,7 @@ from app.schemas.location import Location, LocationHoursDay, LocationQueryParams
 
 
 logger = logging.getLogger(__name__)
+STORE_TIMEZONE = ZoneInfo("America/Indiana/Indianapolis")
 
 
 class LocationService:
@@ -36,20 +38,18 @@ class LocationService:
         self,
         location: Location,
         pickup_time: datetime,
-        *,
-        buffer_minutes: int = 10,
     ) -> None:
-        weekday = pickup_time.strftime("%A").lower()
+        pickup_local = pickup_time.astimezone(STORE_TIMEZONE) if pickup_time.tzinfo else pickup_time.replace(tzinfo=STORE_TIMEZONE)
+        weekday = pickup_local.strftime("%A").lower()
         hours = getattr(location.hours, weekday, None)
         if not hours:
-            raise BadRequestError("Pickup time must be during store hours.")
+            raise BadRequestError(f"This store is closed on {pickup_local.strftime('%A')}.")
         open_time = self._parse_time(hours.open)
         close_time = self._parse_time(hours.close)
         if not open_time or not close_time:
-            raise BadRequestError("Pickup time must be during store hours.")
+            raise BadRequestError(f"This store is closed on {pickup_local.strftime('%A')}.")
 
-        pickup_local = pickup_time.astimezone()
-        if pickup_local <= datetime.now().astimezone():
+        if pickup_local <= datetime.now(STORE_TIMEZONE):
             raise BadRequestError("Pickup time must be in the future.")
         open_at = pickup_local.replace(
             hour=open_time.hour,
@@ -68,11 +68,9 @@ class LocationService:
             if pickup_local < open_at:
                 pickup_local += timedelta(days=1)
 
-        earliest = open_at + timedelta(minutes=buffer_minutes)
-        latest = close_at - timedelta(minutes=buffer_minutes)
-        if pickup_local < earliest or pickup_local > latest:
+        if pickup_local < open_at or pickup_local >= close_at:
             raise BadRequestError(
-                "Pickup time must be at least 10 minutes after opening and 10 minutes before closing."
+                f"Pickup time must be between {open_at.strftime('%-I:%M %p')} and {close_at.strftime('%-I:%M %p')} for this store."
             )
 
     def _enrich(self, location: Location) -> Location:

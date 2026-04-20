@@ -1,4 +1,7 @@
 import bcrypt
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import (
@@ -12,6 +15,7 @@ from app.api.dependencies import (
     get_search_service,
     get_stats_service,
 )
+from app.core.errors import BadRequestError, DatabaseError
 from app.main import create_app
 from app.schemas.auth import LoginResponse
 from app.schemas.location import Location, LocationQueryParams
@@ -26,6 +30,8 @@ from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
 from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderQueryParams
 from app.schemas.search import SearchResponse, SearchResult
 from app.schemas.stats import OrderStats, TopLocation, TopMenuItem
+from app.services.locations import LocationService
+from app.services.orders import OrderService
 
 
 class StubLocationService:
@@ -72,6 +78,15 @@ class StubLocationService:
             drive_thru=False,
             door_dash=True,
             full_address="123 Main St, Indianapolis, IN, 46204",
+            hours={
+                "monday": {"open": "05:30", "close": "20:00"},
+                "tuesday": {"open": "05:30", "close": "20:00"},
+                "wednesday": {"open": "05:30", "close": "20:00"},
+                "thursday": {"open": "05:30", "close": "20:00"},
+                "friday": {"open": "05:30", "close": "20:00"},
+                "saturday": {"open": "05:30", "close": "20:00"},
+                "sunday": {"open": "05:30", "close": "20:00"},
+            },
             hours_today={"open": "07:00", "close": "20:00"},
             open_now=True,
             store_name="Uncle Joe's Indianapolis",
@@ -896,3 +911,55 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/orders/order-new")
     assert response.status_code == 200
     assert response.json()["order_id"] == "order-new"
+
+
+def test_pickup_time_validation_uses_store_local_hours() -> None:
+    service = LocationService(repository=None)  # type: ignore[arg-type]
+    location = StubLocationService().get_location("101")
+    valid_pickup = datetime(2026, 4, 20, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    service.validate_pickup_time(location, valid_pickup)
+
+    invalid_pickup = datetime(2026, 4, 20, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    try:
+        service.validate_pickup_time(location, invalid_pickup)
+    except BadRequestError as exc:
+        assert "Pickup time must be between" in exc.detail
+    else:
+        raise AssertionError("Expected pickup validation to fail outside store hours.")
+
+
+def test_order_service_include_items_falls_back_to_empty_arrays() -> None:
+    class FailingOrderRepository:
+        def list_orders_for_member(self, **kwargs):
+            return [
+                {
+                    "order_id": "order-1",
+                    "member_id": "member-1",
+                    "store_id": "101",
+                    "store_city": "Indianapolis",
+                    "store_state": "IN",
+                    "store_phone": "317-555-0101",
+                    "order_date": "2026-04-20T12:00:00Z",
+                    "items_subtotal": 10.0,
+                    "order_discount": 0.0,
+                    "order_subtotal": 10.0,
+                    "sales_tax": 0.7,
+                    "order_total": 10.7,
+                    "submitted_at": "2026-04-20T12:00:00Z",
+                    "ready_by_estimate": "2026-04-20T12:15:00Z",
+                    "order_status": "order_received",
+                    "estimated_prep_minutes": 15,
+                    "special_instructions": None,
+                }
+            ]
+
+        def list_order_items(self, order_ids):
+            raise DatabaseError()
+
+    service = OrderService(FailingOrderRepository())  # type: ignore[arg-type]
+    orders = service.list_member_orders(
+        "member-1",
+        OrderQueryParams(include_items=True),
+    )
+    assert len(orders) == 1
+    assert orders[0].items == []

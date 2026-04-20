@@ -17,8 +17,8 @@ OrderStatus = Literal[
 class OrderItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    order_item_id: str
-    order_id: str
+    order_item_id: str | None = None
+    order_id: str | None = None
     menu_item_id: str | None = None
     item_name: str | None = None
     size: str | None = None
@@ -34,6 +34,10 @@ class Order(BaseModel):
     order_id: str
     member_id: str | None = None
     store_id: str | None = None
+    store_name: str | None = None
+    store_city: str | None = None
+    store_state: str | None = None
+    store_phone: str | None = None
     order_date: datetime | None = None
     items_subtotal: float | None = None
     order_discount: float | None = None
@@ -46,6 +50,8 @@ class Order(BaseModel):
     order_status: OrderStatus | None = None
     estimated_prep_minutes: int | None = None
     special_instructions: str | None = None
+    points_earned: int | None = None
+    points_redeemed: int | None = None
     items: list[OrderItem] = Field(default_factory=list)
 
 
