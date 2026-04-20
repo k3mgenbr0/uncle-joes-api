@@ -328,7 +328,7 @@ def create_member_order(
     candidate_pickup_time = body.pickup_time or (
         datetime.now(timezone.utc) + timedelta(minutes=settings.order_default_prep_minutes)
     )
-    location_service.validate_pickup_time(store, candidate_pickup_time)
+    normalized_pickup_time = location_service.validate_pickup_time(store, candidate_pickup_time)
 
     validated_items: list[dict] = []
     for item in body.items:
@@ -351,7 +351,7 @@ def create_member_order(
         items=validated_items,
         payment_method=body.payment_method,
         tax_rate=settings.order_tax_rate,
-        pickup_time=body.pickup_time,
+        pickup_time=normalized_pickup_time,
         special_instructions=body.special_instructions,
         estimated_prep_minutes=settings.order_default_prep_minutes,
     )

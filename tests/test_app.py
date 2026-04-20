@@ -919,6 +919,12 @@ def test_pickup_time_validation_uses_store_local_hours() -> None:
     valid_pickup = datetime(2026, 4, 20, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     service.validate_pickup_time(location, valid_pickup)
 
+    cross_timezone_pickup = datetime(2026, 4, 20, 11, 50, tzinfo=ZoneInfo("America/Los_Angeles"))
+    normalized = service.validate_pickup_time(location, cross_timezone_pickup)
+    assert normalized.strftime("%A") == "Monday"
+    assert normalized.hour == 11
+    assert normalized.minute == 50
+
     invalid_pickup = datetime(2026, 4, 20, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     try:
         service.validate_pickup_time(location, invalid_pickup)

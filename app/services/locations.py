@@ -38,10 +38,18 @@ class LocationService:
         self,
         location: Location,
         pickup_time: datetime,
-    ) -> None:
-        pickup_local = pickup_time.astimezone(STORE_TIMEZONE) if pickup_time.tzinfo else pickup_time.replace(tzinfo=STORE_TIMEZONE)
+    ) -> datetime:
+        pickup_local = self._normalize_pickup_time(pickup_time)
         weekday = pickup_local.strftime("%A").lower()
         hours = getattr(location.hours, weekday, None)
+        logger.info(
+            "Validating pickup time store_id=%s pickup_time_raw=%s pickup_time_local=%s weekday=%s hours=%s",
+            location.location_id,
+            pickup_time.isoformat(),
+            pickup_local.isoformat(),
+            weekday,
+            hours.model_dump() if hasattr(hours, "model_dump") else hours,
+        )
         if not hours:
             raise BadRequestError(f"This store is closed on {pickup_local.strftime('%A')}.")
         open_time = self._parse_time(hours.open)
@@ -72,6 +80,7 @@ class LocationService:
             raise BadRequestError(
                 f"Pickup time must be between {open_at.strftime('%-I:%M %p')} and {close_at.strftime('%-I:%M %p')} for this store."
             )
+        return pickup_local
 
     def _enrich(self, location: Location) -> Location:
         location.full_address = self._build_full_address(location)
@@ -123,6 +132,23 @@ class LocationService:
         if open_time <= close_time:
             return open_time <= now <= close_time
         return now >= open_time or now <= close_time
+
+    @staticmethod
+    def _normalize_pickup_time(pickup_time: datetime) -> datetime:
+        if pickup_time.tzinfo is None:
+            return pickup_time.replace(tzinfo=STORE_TIMEZONE)
+        # Treat the submitted ISO timestamp as a store-local wall-clock selection
+        # so the picked date/time stays aligned with the schedule shown in the UI.
+        return datetime(
+            pickup_time.year,
+            pickup_time.month,
+            pickup_time.day,
+            pickup_time.hour,
+            pickup_time.minute,
+            pickup_time.second,
+            pickup_time.microsecond,
+            tzinfo=STORE_TIMEZONE,
+        )
 
     @staticmethod
     def _services(location: Location) -> list[str]:
