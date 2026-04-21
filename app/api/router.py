@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, health, locations, member_auth, members, menu, orders, search, stats
+from app.api.routes import auth, health, locations, member_auth, members, menu, orders, rewards, search, stats
 
 
 api_router = APIRouter()
@@ -11,5 +11,6 @@ api_router.include_router(locations.router)
 api_router.include_router(members.router)
 api_router.include_router(menu.router)
 api_router.include_router(orders.router)
+api_router.include_router(rewards.router)
 api_router.include_router(search.router)
 api_router.include_router(stats.router)

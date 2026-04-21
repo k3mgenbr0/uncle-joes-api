@@ -200,6 +200,10 @@ class OrderRepository:
             SELECT
                 CAST(o.{self._order_id_column} AS STRING) AS order_id,
                 CAST(o.{self._order_store_id_column} AS STRING) AS store_id,
+                CASE
+                    WHEN l.{self._location_city_column} IS NULL THEN NULL
+                    ELSE CONCAT("Uncle Joe's ", CAST(l.{self._location_city_column} AS STRING))
+                END AS store_name,
                 CAST(l.{self._location_city_column} AS STRING) AS store_city,
                 CAST(l.{self._location_state_column} AS STRING) AS store_state,
                 CAST(o.{self._order_date_column} AS STRING) AS order_date,
@@ -209,7 +213,9 @@ class OrderRepository:
                         FLOOR(SAFE_CAST(o.{self._order_total_column} AS FLOAT64)),
                         0
                     ) AS INT64
-                ) AS points_earned
+                ) AS points_earned,
+                0 AS points_redeemed,
+                "order_earned" AS activity_type
             FROM {self._orders_table} AS o
             LEFT JOIN {self._locations_table} AS l
                 ON CAST(o.{self._order_store_id_column} AS STRING)
@@ -223,6 +229,24 @@ class OrderRepository:
             bigquery.ScalarQueryParameter("limit", "INT64", limit),
         ]
         return self._runner.fetch_all(query, params)
+
+    def get_member_points_in_window(self, member_id: str, window_days: int) -> int:
+        query = f"""
+            SELECT
+                COALESCE(
+                    SUM(CAST(FLOOR(SAFE_CAST({self._order_total_column} AS FLOAT64)) AS INT64)),
+                    0
+                ) AS total_points
+            FROM {self._orders_table}
+            WHERE CAST({self._order_member_id_column} AS STRING) = @member_id
+              AND DATE({self._order_date_column}) >= DATE_SUB(CURRENT_DATE(), INTERVAL @window_days DAY)
+        """
+        params = [
+            bigquery.ScalarQueryParameter("member_id", "STRING", member_id),
+            bigquery.ScalarQueryParameter("window_days", "INT64", window_days),
+        ]
+        row = self._runner.fetch_one(query, params) or {"total_points": 0}
+        return int(row["total_points"] or 0)
 
     def get_member_first_order_date(self, member_id: str) -> str | None:
         query = f"""

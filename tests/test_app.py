@@ -28,6 +28,7 @@ from app.schemas.member import (
 )
 from app.schemas.menu import MenuItem, MenuItemStats, MenuQueryParams
 from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderQueryParams
+from app.schemas.rewards import MemberRewardsSummary
 from app.schemas.search import SearchResponse, SearchResult
 from app.schemas.stats import OrderStats, TopLocation, TopMenuItem
 from app.services.locations import LocationService
@@ -283,6 +284,15 @@ class StubMemberService:
             email="member@example.com",
             phone_number="317-555-9999",
             home_store="101",
+            rewards_tier="silver",
+            current_points=125,
+            lifetime_points=125,
+            points_to_next_reward=125,
+            next_tier_name="gold",
+            current_tier_min_points=100,
+            next_tier_min_points=250,
+            next_reward_threshold=250,
+            current_reward_progress=125,
             preferred_store_id="101",
             preferred_store={
                 "location_id": "101",
@@ -304,11 +314,52 @@ class StubMemberService:
             email="member@example.com",
             phone_number="317-555-9999",
             home_store="101",
+            rewards_tier="silver",
+            current_points=125,
+            lifetime_points=125,
+            points_to_next_reward=125,
+            next_tier_name="gold",
+            current_tier_min_points=100,
+            next_tier_min_points=250,
+            next_reward_threshold=250,
+            current_reward_progress=125,
             preferred_store_id="101",
         )
 
     def get_points(self, member_id: str, points: int) -> MemberPoints:
         return MemberPoints(member_id=member_id, total_points=points)
+
+    def get_rewards_summary(self, member_id: str) -> MemberRewardsSummary:
+        return MemberRewardsSummary(
+            member_id=member_id,
+            current_points=125,
+            lifetime_points=125,
+            rewards_tier="silver",
+            points_to_next_reward=125,
+            next_tier_name="gold",
+            current_tier_min_points=100,
+            next_tier_min_points=250,
+            next_reward_threshold=250,
+            current_reward_progress=125,
+            points_earned_last_30_days=54,
+            points_earned_last_90_days=125,
+            bonus_programs=[],
+        )
+
+    def get_rewards_program(self) -> dict:
+        return {
+            "points_rule": "1 point per whole dollar spent",
+            "tiers": [
+                {"name": "bronze", "min_points": 0},
+                {"name": "silver", "min_points": 100},
+                {"name": "gold", "min_points": 250},
+            ],
+            "reward_thresholds": [
+                {"name": "Silver Tier", "points_required": 100},
+                {"name": "Gold Tier", "points_required": 250},
+            ],
+            "bonus_programs": [],
+        }
 
 
 class StubOrderService:
@@ -398,10 +449,13 @@ class StubOrderService:
                 order_id="order-3",
                 order_date="2026-04-12T13:15:00Z",
                 store_id="101",
+                store_name="Uncle Joe's Indianapolis",
                 store_city="Indianapolis",
                 store_state="IN",
                 order_total=9.75,
                 points_earned=9,
+                points_redeemed=0,
+                activity_type="order_earned",
             )
         ][:limit]
 
@@ -989,6 +1043,13 @@ def test_member_auth_session_endpoints() -> None:
     response = client.get("/api/member/points/history")
     assert response.status_code == 200
     assert response.json()[0]["points_earned"] == 9
+    assert response.json()[0]["store_name"] == "Uncle Joe's Indianapolis"
+    response = client.get("/api/member/rewards")
+    assert response.status_code == 200
+    assert response.json()["rewards_tier"] == "silver"
+    response = client.get("/api/member/rewards/redemptions")
+    assert response.status_code == 200
+    assert response.json()["redemptions"] == []
     response = client.get("/api/member/favorites")
     assert response.status_code == 200
     response = client.post("/api/member/favorites", json={"menu_item_id": "mocha"})
@@ -1007,8 +1068,19 @@ def test_member_auth_session_endpoints() -> None:
     assert payload["orders"][0]["points_earned"] >= 0
     assert isinstance(payload["favorites"], list)
     assert isinstance(payload["points_history"], list)
+    assert payload["rewards"]["current_points"] == 125
     response = client.post("/api/member/logout")
     assert response.status_code == 200
+
+
+def test_rewards_program_endpoint() -> None:
+    client = build_test_client()
+    response = client.get("/rewards/program")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["points_rule"] == "1 point per whole dollar spent"
+    assert payload["tiers"][0]["name"] == "bronze"
+    assert isinstance(payload["reward_thresholds"], list)
 
 
 def test_order_detail_endpoint() -> None:

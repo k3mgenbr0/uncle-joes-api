@@ -7,9 +7,17 @@ from app.repositories.members import MemberRepository
 from app.repositories.orders import OrderRepository
 from app.schemas.member import Member, MemberPoints
 from app.schemas.location import LocationSummary
+from app.schemas.rewards import MemberRewardsSummary, BonusProgram, RewardThreshold, RewardTier
 
 
 logger = logging.getLogger(__name__)
+
+REWARD_TIERS: tuple[tuple[str, int], ...] = (
+    ("bronze", 0),
+    ("silver", 100),
+    ("gold", 250),
+    ("platinum", 500),
+)
 
 
 class MemberService:
@@ -37,6 +45,38 @@ class MemberService:
         logger.info("Calculated points member_id=%s points=%s", member_id, points)
         return MemberPoints(member_id=member_id, total_points=points)
 
+    def get_rewards_summary(self, member_id: str) -> MemberRewardsSummary:
+        current_points = self._order_repository.get_member_points(member_id)
+        lifetime_points = current_points
+        summary = self._build_rewards_summary(
+            member_id=member_id,
+            current_points=current_points,
+            lifetime_points=lifetime_points,
+            points_last_30=self._order_repository.get_member_points_in_window(member_id, 30),
+            points_last_90=self._order_repository.get_member_points_in_window(member_id, 90),
+        )
+        logger.info(
+            "Calculated rewards summary member_id=%s tier=%s current_points=%s",
+            member_id,
+            summary.rewards_tier,
+            summary.current_points,
+        )
+        return summary
+
+    def get_rewards_program(self) -> dict:
+        tiers = [RewardTier(name=name, min_points=min_points) for name, min_points in REWARD_TIERS]
+        reward_thresholds = [
+            RewardThreshold(name=f"{name.title()} Tier", points_required=min_points)
+            for name, min_points in REWARD_TIERS
+            if min_points > 0
+        ]
+        return {
+            "points_rule": "1 point per whole dollar spent",
+            "tiers": tiers,
+            "reward_thresholds": reward_thresholds,
+            "bonus_programs": [],
+        }
+
     def _enrich(self, member: Member) -> Member:
         member.preferred_store_id = member.home_store
         member.birthday_month_day = None
@@ -44,13 +84,40 @@ class MemberService:
         member.profile_photo_url = None
         try:
             total_points = self._order_repository.get_member_points(member.member_id)
-            member.rewards_tier = self._rewards_tier(total_points)
-            member.points_to_next_reward = self._points_to_next_reward(total_points)
+            rewards = self._build_rewards_summary(
+                member_id=member.member_id,
+                current_points=total_points,
+                lifetime_points=total_points,
+                points_last_30=self._order_repository.get_member_points_in_window(
+                    member.member_id,
+                    30,
+                ),
+                points_last_90=self._order_repository.get_member_points_in_window(
+                    member.member_id,
+                    90,
+                ),
+            )
+            member.rewards_tier = rewards.rewards_tier
+            member.current_points = rewards.current_points
+            member.lifetime_points = rewards.lifetime_points
+            member.points_to_next_reward = rewards.points_to_next_reward
+            member.next_tier_name = rewards.next_tier_name
+            member.current_tier_min_points = rewards.current_tier_min_points
+            member.next_tier_min_points = rewards.next_tier_min_points
+            member.next_reward_threshold = rewards.next_reward_threshold
+            member.current_reward_progress = rewards.current_reward_progress
             member.join_date = self._order_repository.get_member_first_order_date(member.member_id)
         except DatabaseError:
             logger.warning("Skipping order-based member enrichment member_id=%s", member.member_id)
             member.rewards_tier = None
+            member.current_points = None
+            member.lifetime_points = None
             member.points_to_next_reward = None
+            member.next_tier_name = None
+            member.current_tier_min_points = None
+            member.next_tier_min_points = None
+            member.next_reward_threshold = None
+            member.current_reward_progress = None
             member.join_date = None
         try:
             member.preferred_store = self._preferred_store(member.home_store)
@@ -96,18 +163,41 @@ class MemberService:
             phone=row.get("phone"),
         )
 
-    @staticmethod
-    def _rewards_tier(points: int) -> str:
-        if points >= 500:
-            return "platinum"
-        if points >= 250:
-            return "gold"
-        if points >= 100:
-            return "silver"
-        return "bronze"
-
-    @staticmethod
-    def _points_to_next_reward(points: int) -> int:
-        reward_increment = 25
-        remainder = points % reward_increment
-        return 0 if remainder == 0 else reward_increment - remainder
+    def _build_rewards_summary(
+        self,
+        *,
+        member_id: str,
+        current_points: int,
+        lifetime_points: int,
+        points_last_30: int,
+        points_last_90: int,
+    ) -> MemberRewardsSummary:
+        tier_index = 0
+        for index, (_, min_points) in enumerate(REWARD_TIERS):
+            if current_points >= min_points:
+                tier_index = index
+        current_tier_name, current_tier_min = REWARD_TIERS[tier_index]
+        if tier_index + 1 < len(REWARD_TIERS):
+            next_tier_name, next_tier_min = REWARD_TIERS[tier_index + 1]
+            points_to_next = max(next_tier_min - current_points, 0)
+            next_reward_threshold = next_tier_min
+        else:
+            next_tier_name = None
+            next_tier_min = None
+            points_to_next = 0
+            next_reward_threshold = current_points
+        return MemberRewardsSummary(
+            member_id=member_id,
+            current_points=current_points,
+            lifetime_points=lifetime_points,
+            rewards_tier=current_tier_name,
+            points_to_next_reward=points_to_next,
+            next_tier_name=next_tier_name,
+            current_tier_min_points=current_tier_min,
+            next_tier_min_points=next_tier_min,
+            next_reward_threshold=next_reward_threshold,
+            current_reward_progress=current_points,
+            points_earned_last_30_days=points_last_30,
+            points_earned_last_90_days=points_last_90,
+            bonus_programs=[],
+        )

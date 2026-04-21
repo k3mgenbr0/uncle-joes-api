@@ -27,6 +27,7 @@ from app.schemas.member import (
     MemberSummary,
 )
 from app.schemas.order import CreateOrderRequest, Order, OrderDetail, OrderQueryParams
+from app.schemas.rewards import MemberRewardsRedemptionList, MemberRewardsSummary
 from app.services.auth import AuthService
 from app.services.locations import LocationService
 from app.services.members import MemberService
@@ -99,6 +100,22 @@ ORDER_DETAIL_EXAMPLE = {
         "method": "pay_in_store",
         "status": "pending",
     },
+}
+
+REWARDS_SUMMARY_EXAMPLE = {
+    "member_id": "member-1",
+    "current_points": 125,
+    "lifetime_points": 125,
+    "rewards_tier": "silver",
+    "points_to_next_reward": 125,
+    "next_tier_name": "gold",
+    "current_tier_min_points": 100,
+    "next_tier_min_points": 250,
+    "next_reward_threshold": 250,
+    "current_reward_progress": 125,
+    "points_earned_last_30_days": 54,
+    "points_earned_last_90_days": 125,
+    "bonus_programs": [],
 }
 
 
@@ -213,6 +230,31 @@ def member_points_history(
     order_service: OrderService = Depends(get_order_service),
 ) -> list[MemberPointsHistoryEntry]:
     return order_service.list_member_points_history(current_member.member_id, limit)
+
+
+@router.get(
+    "/rewards",
+    response_model=MemberRewardsSummary,
+    responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get the authenticated member rewards summary",
+)
+def member_rewards(
+    current_member: Member = Depends(get_current_member),
+    member_service: MemberService = Depends(get_member_service),
+) -> MemberRewardsSummary:
+    return member_service.get_rewards_summary(current_member.member_id)
+
+
+@router.get(
+    "/rewards/redemptions",
+    response_model=MemberRewardsRedemptionList,
+    responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get the authenticated member rewards redemptions",
+)
+def member_rewards_redemptions(
+    current_member: Member = Depends(get_current_member),
+) -> MemberRewardsRedemptionList:
+    return MemberRewardsRedemptionList(redemptions=[], redemption_tracking_enabled=False)
 
 
 @router.get(
@@ -465,6 +507,7 @@ def member_dashboard(
     location_service: LocationService = Depends(get_location_service),
 ) -> MemberDashboard:
     member = member_service.get_member(current_member.member_id)
+    rewards = member_service.get_rewards_summary(current_member.member_id)
     points_value = order_service.calculate_points(current_member.member_id)
     points = member_service.get_points(current_member.member_id, points_value)
     store_available = None
@@ -497,5 +540,6 @@ def member_dashboard(
         orders=orders,
         favorites=favorites,
         points_history=points_history,
+        rewards=rewards,
         pagination=pagination,
     )

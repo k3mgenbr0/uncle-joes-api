@@ -14,6 +14,7 @@ Frontend-facing backend behaviors:
 - pickup ordering with pay-at-store checkout
 - store-aware ordering rules driven by `open_for_business`
 - backend-provided store display labels and nearby-store metadata
+- richer rewards metadata for tier progress and milestone UI
 - pickup-time validation against store-local hours
 - order progress fields for confirmation and history screens
 
@@ -112,6 +113,17 @@ Session/profile responses now keep preferred-store data aligned by returning:
 Returns the authenticated member profile with derived rewards and preferred-store data.  
 Use case: account settings and profile screen.
 
+Profile/session data now exposes additive rewards fields such as:
+- `current_points`
+- `lifetime_points`
+- `rewards_tier`
+- `points_to_next_reward`
+- `next_tier_name`
+- `current_tier_min_points`
+- `next_tier_min_points`
+- `next_reward_threshold`
+- `current_reward_progress`
+
 ### `GET /api/member/points`
 Returns the authenticated member’s points balance.  
 Use case: profile and rewards widgets.
@@ -121,6 +133,48 @@ Returns a per-order breakdown of points earned, newest first.
 Use case: rewards history section and “how did I earn these points?” views.
 
 Supports: `limit`.
+
+Each history entry includes:
+- `order_id`
+- `order_date`
+- `store_id`
+- `store_name`
+- `store_city`
+- `store_state`
+- `order_total`
+- `points_earned`
+- `points_redeemed`
+- `activity_type`
+
+The response remains a list for backward compatibility, and empty histories return `[]`.
+
+### `GET /api/member/rewards`
+Returns a dedicated rewards summary for the authenticated member.  
+Use case: tier progress bars, milestone cards, “next reward” messaging, and summary stats.
+
+Guaranteed fields:
+- `member_id`
+- `current_points`
+- `lifetime_points`
+- `rewards_tier`
+- `points_to_next_reward`
+- `next_tier_name`
+- `current_tier_min_points`
+- `next_tier_min_points`
+- `next_reward_threshold`
+- `current_reward_progress`
+- `points_earned_last_30_days`
+- `points_earned_last_90_days`
+- `bonus_programs`
+
+### `GET /api/member/rewards/redemptions`
+Returns the authenticated member’s rewards redemptions.  
+Use case: “points spent” history and future redemption UX.
+
+Current behavior:
+- the endpoint is available now
+- the dataset does not currently track real redemptions
+- the response returns `redemptions: []` and `redemption_tracking_enabled: false`
 
 ### `GET /api/member/favorites`
 Returns the authenticated member’s favorite menu items.  
@@ -205,6 +259,7 @@ Dashboard response also includes:
 - `points_earned` per order
 - `favorites`
 - `points_history`
+- `rewards`
 
 Dashboard and order-history responses include order-progress fields such as:
 - `pickup_time`
@@ -339,6 +394,18 @@ Supports: `window_days` for time‑bounded stats.
 Returns a full order detail payload for the authenticated member.  
 Use case: dedicated order detail page.
 
+### `GET /rewards/program`
+Returns rewards-program metadata for the app.  
+Use case: “How rewards work,” milestone explanations, and future promotions UI.
+
+Program metadata includes:
+- `points_rule`
+- `tiers`
+- `reward_thresholds`
+- `bonus_programs`
+
+Current tier thresholds are exposed directly by the backend so the frontend does not have to hardcode them.
+
 ### `GET /docs`
 Interactive API documentation (Swagger UI).
 
@@ -356,6 +423,7 @@ Health checks for uptime and BigQuery connectivity.
 - Backend-provided `display_name` store labels for ordering UIs
 - Explicit favorites write support
 - Favorites enriched for reorder flows
+- Dedicated rewards summary and rewards program metadata
 - Pickup-time validation against store-local hours
 - Swagger docs at `/docs`
 - Filtering, pagination, sorting, fuzzy search

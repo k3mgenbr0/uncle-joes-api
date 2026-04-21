@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.schemas.location import LocationSummary
 from app.schemas.order import DashboardOrder, Order
+from app.schemas.rewards import MemberRewardsSummary
 
 
 class Member(BaseModel):
@@ -16,7 +17,14 @@ class Member(BaseModel):
     phone_number: str | None = None
     home_store: str | None = None
     rewards_tier: str | None = None
+    current_points: int | None = None
+    lifetime_points: int | None = None
     points_to_next_reward: int | None = None
+    next_tier_name: str | None = None
+    current_tier_min_points: int | None = None
+    next_tier_min_points: int | None = None
+    next_reward_threshold: int | None = None
+    current_reward_progress: int | None = None
     preferred_store_id: str | None = None
     preferred_store: LocationSummary | None = None
     join_date: str | None = None
@@ -39,10 +47,13 @@ class MemberPointsHistoryEntry(BaseModel):
     order_id: str
     order_date: str | None = None
     store_id: str | None = None
+    store_name: str | None = None
     store_city: str | None = None
     store_state: str | None = None
     order_total: float | None = None
     points_earned: int = 0
+    points_redeemed: int = 0
+    activity_type: str = "order_earned"
 
 
 class MemberFavoriteItem(BaseModel):
@@ -93,4 +104,5 @@ class MemberDashboard(BaseModel):
     orders: list[DashboardOrder]
     favorites: list[MemberFavoriteItem] = Field(default_factory=list)
     points_history: list[MemberPointsHistoryEntry] = Field(default_factory=list)
+    rewards: MemberRewardsSummary | None = None
     pagination: dict | None = None
