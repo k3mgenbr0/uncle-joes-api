@@ -1,10 +1,17 @@
 import logging
+import math
+import re
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.errors import BadRequestError, NotFoundError
 from app.repositories.locations import LocationRepository
-from app.schemas.location import Location, LocationHoursDay, LocationQueryParams
+from app.schemas.location import (
+    Location,
+    LocationHoursDay,
+    LocationQueryParams,
+    NearbyLocationQueryParams,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +33,7 @@ class LocationService:
             len(rows),
         )
         locations = [self._enrich(Location.model_validate(row)) for row in rows]
+        self._decorate_nearby_metadata(locations)
         if params.orderable_only:
             locations = [location for location in locations if location.ordering_available]
         return locations
@@ -35,7 +43,28 @@ class LocationService:
         if row is None:
             raise NotFoundError(f"Location '{location_id}' was not found.")
         logger.info("Fetched location location_id=%s", location_id)
-        return self._enrich(Location.model_validate(row))
+        location = self._enrich(Location.model_validate(row))
+        pool = self.list_locations(LocationQueryParams(limit=500, offset=0))
+        self._decorate_nearby_metadata([location], pool=pool)
+        return location
+
+    def list_nearby_locations(self, params: NearbyLocationQueryParams) -> list[Location]:
+        locations = self.list_locations(LocationQueryParams(limit=500, offset=0))
+        enriched: list[Location] = []
+        for location in locations:
+            if location.latitude is None or location.longitude is None:
+                continue
+            location.distance_miles = round(
+                self._distance_miles(params.lat, params.lng, location.latitude, location.longitude),
+                2,
+            )
+            if params.open_for_business is not None and location.open_for_business is not params.open_for_business:
+                continue
+            if params.orderable_only and not location.ordering_available:
+                continue
+            enriched.append(location)
+        enriched.sort(key=lambda location: (location.distance_miles is None, location.distance_miles or math.inf, location.state, location.city))
+        return enriched[: params.limit]
 
     def validate_pickup_time(
         self,
@@ -87,9 +116,11 @@ class LocationService:
 
     def _enrich(self, location: Location) -> Location:
         location.full_address = self._build_full_address(location)
+        location.address = location.full_address
         location.hours_today = self._today_hours(location)
         location.open_now = self._is_open_now(location.hours_today)
         location.store_name = f"Uncle Joe's {location.city}" if location.city else None
+        location.display_name = self._display_name(location)
         location.services = self._services(location)
         location.holiday_hours = []
         # `open_for_business` is the single source of truth for whether a store can
@@ -103,6 +134,8 @@ class LocationService:
         else:
             location.availability_status = "coming_soon"
             location.availability_message = "Coming Soon!"
+        location.region = location.state
+        location.metro_area = location.city
         return location
 
     @staticmethod
@@ -186,3 +219,80 @@ class LocationService:
         # Treat null, missing, or invalid values as unavailable. Only an explicit
         # boolean True allows ordering.
         return location.open_for_business is True
+
+    @staticmethod
+    def _display_name(location: Location) -> str | None:
+        if not location.city:
+            return location.store_name
+        street_source = location.address_one or location.near_by
+        street_label = LocationService._street_label(street_source)
+        if street_label:
+            return f"{location.city} - {street_label}"
+        return location.city
+
+    @staticmethod
+    def _street_label(value: str | None) -> str | None:
+        if not value:
+            return None
+        street = value.split(";")[-1].strip()
+        street = re.sub(r"^\d+\s+", "", street).strip()
+        street = re.sub(r"\s+Suite\s+.+$", "", street, flags=re.IGNORECASE).strip()
+        street = re.sub(r"\s+#.+$", "", street).strip()
+        return street or None
+
+    def _decorate_nearby_metadata(
+        self,
+        locations: list[Location],
+        *,
+        pool: list[Location] | None = None,
+    ) -> None:
+        comparison_pool = pool or locations
+        orderable_pool = [
+            candidate
+            for candidate in comparison_pool
+            if candidate.location_id
+            and candidate.ordering_available
+            and candidate.latitude is not None
+            and candidate.longitude is not None
+        ]
+        for location in locations:
+            location.nearby_store_ids = self._nearest_store_ids(location, orderable_pool)
+
+    def _nearest_store_ids(
+        self,
+        location: Location,
+        candidates: list[Location],
+        *,
+        limit: int = 3,
+    ) -> list[str]:
+        if location.latitude is None or location.longitude is None:
+            return []
+        ranked = [
+            (
+                self._distance_miles(
+                    location.latitude,
+                    location.longitude,
+                    candidate.latitude,
+                    candidate.longitude,
+                ),
+                candidate.location_id,
+            )
+            for candidate in candidates
+            if candidate.location_id != location.location_id
+        ]
+        ranked.sort(key=lambda item: item[0])
+        return [location_id for _, location_id in ranked[:limit]]
+
+    @staticmethod
+    def _distance_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+        radius_miles = 3958.8
+        lat1_rad = math.radians(lat1)
+        lat2_rad = math.radians(lat2)
+        delta_lat = math.radians(lat2 - lat1)
+        delta_lng = math.radians(lng2 - lng1)
+        haversine = (
+            math.sin(delta_lat / 2) ** 2
+            + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lng / 2) ** 2
+        )
+        arc = 2 * math.atan2(math.sqrt(haversine), math.sqrt(1 - haversine))
+        return radius_miles * arc

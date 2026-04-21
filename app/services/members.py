@@ -1,4 +1,5 @@
 import logging
+import re
 
 from app.core.errors import DatabaseError, NotFoundError
 from app.repositories.locations import LocationRepository
@@ -78,12 +79,20 @@ class MemberService:
             row.get("postal_code"),
         ]
         full_address = ", ".join(part for part in address_parts if part) or None
+        address_one = row.get("address_one")
+        street_label = None
+        if address_one:
+            street_label = re.sub(r"^\d+\s+", "", str(address_one)).strip()
+            street_label = re.sub(r"\s+Suite\s+.+$", "", street_label, flags=re.IGNORECASE).strip()
+        display_name = f"{city} - {street_label}" if city and street_label else city
         return LocationSummary(
             location_id=str(row["location_id"]),
             store_name=store_name,
+            display_name=display_name,
             city=city,
             state=row.get("state"),
             full_address=full_address,
+            address=full_address,
             phone=row.get("phone"),
         )
 

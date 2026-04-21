@@ -165,8 +165,12 @@ def member_logout(
 )
 def member_session(
     current_member: Member = Depends(get_current_member),
+    member_service: MemberService = Depends(get_member_service),
 ) -> SessionResponse:
-    return SessionResponse(authenticated=True, member=current_member)
+    return SessionResponse(
+        authenticated=True,
+        member=member_service.get_member(current_member.member_id),
+    )
 
 
 @router.get(
@@ -220,13 +224,19 @@ def member_points_history(
 def member_favorites(
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    store_id: Annotated[str | None, Query(min_length=1)] = None,
     current_member: Member = Depends(get_current_member),
     order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
 ) -> list[MemberFavoriteItem]:
+    store_available = None
+    if store_id:
+        store_available = location_service.get_location(store_id).ordering_available
     return order_service.list_member_favorites(
         current_member.member_id,
         limit,
         window_days=window_days,
+        store_available=store_available,
     )
 
 
@@ -402,9 +412,11 @@ def member_summary(
     recent_limit: Annotated[int, Query(ge=1, le=25)] = 5,
     favorites_limit: Annotated[int, Query(ge=1, le=50)] = 10,
     favorites_window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    store_id: Annotated[str | None, Query(min_length=1)] = None,
     current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
 ) -> MemberSummary:
     member = member_service.get_member(current_member.member_id)
     points = member_service.get_points(
@@ -419,10 +431,14 @@ def member_summary(
         sort_dir="desc",
     )
     recent_orders = order_service.list_member_orders(current_member.member_id, recent_params)
+    store_available = None
+    if store_id:
+        store_available = location_service.get_location(store_id).ordering_available
     favorites = order_service.list_member_favorites(
         current_member.member_id,
         favorites_limit,
         window_days=favorites_window_days,
+        store_available=store_available,
     )
     return MemberSummary(
         member=member,
@@ -442,14 +458,23 @@ def member_dashboard(
     include_items: Annotated[bool, Query()] = True,
     limit: Annotated[int, Query(ge=1, le=50)] = 25,
     offset: Annotated[int, Query(ge=0)] = 0,
+    store_id: Annotated[str | None, Query(min_length=1)] = None,
     current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
 ) -> MemberDashboard:
     member = member_service.get_member(current_member.member_id)
     points_value = order_service.calculate_points(current_member.member_id)
     points = member_service.get_points(current_member.member_id, points_value)
-    favorites = order_service.list_member_favorites(current_member.member_id, limit=10)
+    store_available = None
+    if store_id:
+        store_available = location_service.get_location(store_id).ordering_available
+    favorites = order_service.list_member_favorites(
+        current_member.member_id,
+        limit=10,
+        store_available=store_available,
+    )
     points_history = order_service.list_member_points_history(
         current_member.member_id,
         limit=min(limit, 25),

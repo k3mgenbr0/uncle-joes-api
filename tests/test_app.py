@@ -54,16 +54,45 @@ class StubLocationService:
                 drive_thru=False,
                 door_dash=True,
                 full_address="123 Main St, Indianapolis, IN, 46204",
+                address="123 Main St, Indianapolis, IN, 46204",
                 store_name="Uncle Joe's Indianapolis",
+                display_name="Indianapolis - Main St",
                 services=["wifi", "door_dash", "in_store"],
                 pickup_supported=True,
                 ordering_available=True,
                 availability_status="open",
+                nearby_store_ids=["102", "103"],
+                region="IN",
+                metro_area="Indianapolis",
             )
         ]
         if params.orderable_only:
             return [location for location in locations if location.ordering_available]
         return locations
+
+    def list_nearby_locations(self, params) -> list[Location]:
+        return [
+            Location(
+                location_id="101",
+                city="Indianapolis",
+                state="IN",
+                address_one="123 Main St",
+                full_address="123 Main St, Indianapolis, IN, 46204",
+                address="123 Main St, Indianapolis, IN, 46204",
+                phone="317-555-0101",
+                latitude=39.7684,
+                longitude=-86.1581,
+                open_for_business=True,
+                ordering_available=True,
+                availability_status="open",
+                store_name="Uncle Joe's Indianapolis",
+                display_name="Indianapolis - Main St",
+                distance_miles=1.25,
+                nearby_store_ids=["102", "103"],
+                region="IN",
+                metro_area="Indianapolis",
+            )
+        ][: params.limit]
 
     def get_location(self, location_id: str) -> Location:
         if location_id == "999":
@@ -84,6 +113,7 @@ class StubLocationService:
                 drive_thru=False,
                 door_dash=False,
                 full_address="999 Future Rd, Coming Soon City, IN, 46204",
+                address="999 Future Rd, Coming Soon City, IN, 46204",
                 hours={
                     "monday": {"open": None, "close": None},
                     "tuesday": {"open": None, "close": None},
@@ -96,11 +126,15 @@ class StubLocationService:
                 hours_today={"open": None, "close": None},
                 open_now=False,
                 store_name="Uncle Joe's Coming Soon City",
+                display_name="Coming Soon City - Future Rd",
                 services=[],
                 pickup_supported=False,
                 ordering_available=False,
                 availability_status="coming_soon",
                 availability_message="Coming Soon!",
+                nearby_store_ids=["101"],
+                region="IN",
+                metro_area="Coming Soon City",
             )
         return Location(
             location_id=location_id,
@@ -119,6 +153,7 @@ class StubLocationService:
             drive_thru=False,
             door_dash=True,
             full_address="123 Main St, Indianapolis, IN, 46204",
+            address="123 Main St, Indianapolis, IN, 46204",
             hours={
                 "monday": {"open": "05:30", "close": "20:00"},
                 "tuesday": {"open": "05:30", "close": "20:00"},
@@ -131,10 +166,14 @@ class StubLocationService:
             hours_today={"open": "07:00", "close": "20:00"},
             open_now=True,
             store_name="Uncle Joe's Indianapolis",
+            display_name="Indianapolis - Main St",
             services=["wifi", "door_dash", "in_store"],
             pickup_supported=True,
             ordering_available=True,
             availability_status="open",
+            nearby_store_ids=["102", "103"],
+            region="IN",
+            metro_area="Indianapolis",
         )
 
     def validate_pickup_time(self, location: Location, pickup_time, *, buffer_minutes: int = 10) -> None:
@@ -244,6 +283,17 @@ class StubMemberService:
             email="member@example.com",
             phone_number="317-555-9999",
             home_store="101",
+            preferred_store_id="101",
+            preferred_store={
+                "location_id": "101",
+                "store_name": "Uncle Joe's Indianapolis",
+                "display_name": "Indianapolis - Main St",
+                "city": "Indianapolis",
+                "state": "IN",
+                "full_address": "123 Main St, Indianapolis, IN, 46204",
+                "address": "123 Main St, Indianapolis, IN, 46204",
+                "phone": "317-555-0101",
+            },
         )
 
     def get_member_identity(self, member_id: str) -> Member:
@@ -254,6 +304,7 @@ class StubMemberService:
             email="member@example.com",
             phone_number="317-555-9999",
             home_store="101",
+            preferred_store_id="101",
         )
 
     def get_points(self, member_id: str, points: int) -> MemberPoints:
@@ -512,6 +563,8 @@ class StubOrderService:
         member_id: str,
         limit: int,
         window_days: int | None = None,
+        *,
+        store_available: bool | None = None,
     ) -> list[MemberFavoriteItem]:
         favorites = [
             MemberFavoriteItem(
@@ -519,8 +572,12 @@ class StubOrderService:
                 item_name="Latte",
                 category="Espresso",
                 size="Medium",
+                available_sizes=["Medium"],
+                default_size="Medium",
                 current_price=4.5,
                 image_url=None,
+                available_at_store=store_available,
+                store_availability_status="available" if store_available else None,
                 is_explicit=False,
                 total_orders=10,
                 total_quantity=25,
@@ -535,8 +592,12 @@ class StubOrderService:
                         item_name=menu_item_id.title(),
                         category="Espresso",
                         size="Medium",
+                        available_sizes=["Medium"],
+                        default_size="Medium",
                         current_price=4.5,
                         image_url=None,
+                        available_at_store=store_available,
+                        store_availability_status="available" if store_available else None,
                         is_explicit=True,
                         total_orders=0,
                         total_quantity=0,
@@ -552,6 +613,8 @@ class StubOrderService:
             item_name=menu_item.name,
             category=menu_item.category,
             size=menu_item.size,
+            available_sizes=[menu_item.size] if menu_item.size else [],
+            default_size=menu_item.size,
             current_price=menu_item.price,
             image_url=None,
             is_explicit=True,
@@ -738,6 +801,19 @@ def test_list_locations_supports_filters() -> None:
     response = client.get("/locations", params={"orderable_only": True})
     assert response.status_code == 200
     assert all(item["ordering_available"] is True for item in response.json())
+    assert payload[0]["display_name"] == "Indianapolis - Main St"
+    assert payload[0]["nearby_store_ids"] == ["102", "103"]
+
+
+def test_list_nearby_locations_returns_distance_and_display_fields() -> None:
+    client = build_test_client()
+    response = client.get("/locations/nearby", params={"lat": 39.76, "lng": -86.15})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["display_name"] == "Indianapolis - Main St"
+    assert payload[0]["distance_miles"] == 1.25
+    assert payload[0]["region"] == "IN"
+    assert payload[0]["metro_area"] == "Indianapolis"
 
 
 def test_get_menu_item() -> None:
@@ -756,6 +832,26 @@ def test_login_endpoint() -> None:
     )
     assert response.status_code == 200
     assert response.json()["authenticated"] is True
+
+
+def test_member_session_returns_preferred_store_summary() -> None:
+    client = build_test_client()
+    response = client.get("/api/member/session")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["member"]["preferred_store_id"] == "101"
+    assert payload["member"]["preferred_store"]["display_name"] == "Indianapolis - Main St"
+
+
+def test_member_favorites_can_include_store_context() -> None:
+    client = build_test_client()
+    response = client.get("/api/member/favorites", params={"store_id": "101"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["available_sizes"] == ["Medium"]
+    assert payload[0]["default_size"] == "Medium"
+    assert payload[0]["available_at_store"] is True
+    assert payload[0]["store_availability_status"] == "available"
 
 
 def test_member_profile_endpoint() -> None:
@@ -1001,16 +1097,16 @@ def test_create_member_order_endpoint() -> None:
 def test_pickup_time_validation_uses_store_local_hours() -> None:
     service = LocationService(repository=None)  # type: ignore[arg-type]
     location = StubLocationService().get_location("101")
-    valid_pickup = datetime(2026, 4, 20, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    valid_pickup = datetime(2026, 4, 27, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     service.validate_pickup_time(location, valid_pickup)
 
-    cross_timezone_pickup = datetime(2026, 4, 20, 11, 50, tzinfo=ZoneInfo("America/Los_Angeles"))
+    cross_timezone_pickup = datetime(2026, 4, 27, 11, 50, tzinfo=ZoneInfo("America/Los_Angeles"))
     normalized = service.validate_pickup_time(location, cross_timezone_pickup)
     assert normalized.strftime("%A") == "Monday"
     assert normalized.hour == 11
     assert normalized.minute == 50
 
-    invalid_pickup = datetime(2026, 4, 20, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    invalid_pickup = datetime(2026, 4, 27, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     try:
         service.validate_pickup_time(location, invalid_pickup)
     except BadRequestError as exc:

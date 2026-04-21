@@ -45,9 +45,11 @@ class Location(BaseModel):
     door_dash: bool | None = None
     hours: LocationHours = Field(default_factory=LocationHours)
     full_address: str | None = None
+    address: str | None = None
     hours_today: LocationHoursDay | None = None
     open_now: bool | None = None
     store_name: str | None = None
+    display_name: str | None = None
     services: list[str] = Field(default_factory=list)
     holiday_hours: list[HolidayHours] = Field(default_factory=list)
     pickup_supported: bool | None = None
@@ -55,14 +57,20 @@ class Location(BaseModel):
     ordering_available: bool = False
     availability_status: str = "coming_soon"
     availability_message: str | None = None
+    nearby_store_ids: list[str] = Field(default_factory=list)
+    distance_miles: float | None = None
+    region: str | None = None
+    metro_area: str | None = None
 
 
 class LocationSummary(BaseModel):
     location_id: str
     store_name: str | None = None
+    display_name: str | None = None
     city: str | None = None
     state: str | None = None
     full_address: str | None = None
+    address: str | None = None
     phone: str | None = None
 
 
@@ -76,3 +84,11 @@ class LocationQueryParams(BaseModel):
     orderable_only: bool = False
     limit: int = Field(default=500, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
+
+
+class NearbyLocationQueryParams(BaseModel):
+    lat: float
+    lng: float
+    orderable_only: bool = False
+    open_for_business: bool | None = None
+    limit: int = Field(default=10, ge=1, le=100)

@@ -13,6 +13,7 @@ Frontend-facing backend behaviors:
 - session-based member auth with secure cookies
 - pickup ordering with pay-at-store checkout
 - store-aware ordering rules driven by `open_for_business`
+- backend-provided store display labels and nearby-store metadata
 - pickup-time validation against store-local hours
 - order progress fields for confirmation and history screens
 
@@ -23,6 +24,13 @@ Lists store locations.
 Use case: store locator page and filtering.
 
 Supports: `state`, `city`, `open_for_business`, `orderable_only`, `wifi`, `drive_thru`, `door_dash`, `limit`, `offset`.
+
+Location responses now also include frontend-friendly store-selection fields:
+- `display_name`
+- `address`
+- `nearby_store_ids`
+- `region`
+- `metro_area`
 
 Availability notes:
 - `open_for_business` is the single source of truth for whether a store can accept orders
@@ -38,6 +46,21 @@ Returns one location by ID.
 Use case: store detail page.
 
 Includes address, coordinates, hours, `hours_today`, `open_now`, service flags, and derived store detail fields.
+
+### `GET /locations/nearby`
+Returns locations sorted by distance from a `lat`/`lng` point.  
+Use case: nearby-store suggestions, geolocation fallback pickup selection, and “closest open store” flows.
+
+Supports: `lat`, `lng`, `limit`, `orderable_only`, `open_for_business`.
+
+Nearby responses include:
+- `distance_miles`
+- `display_name`
+- `address`
+- `ordering_available`
+- `availability_status`
+- `availability_message`
+- `nearby_store_ids`
 
 ### `GET /menu`
 Lists menu items.  
@@ -81,6 +104,10 @@ Use case: log out of the dashboard.
 Returns the currently authenticated member.  
 Use case: keep the UI in sync with login state.
 
+Session/profile responses now keep preferred-store data aligned by returning:
+- `preferred_store_id`
+- `preferred_store` summary with `location_id`, `store_name`, `display_name`, `city`, `state`, `full_address`, `address`, and `phone`
+
 ### `GET /api/member/profile`
 Returns the authenticated member profile with derived rewards and preferred-store data.  
 Use case: account settings and profile screen.
@@ -102,6 +129,18 @@ Use case: profile and dashboard favorites section.
 Includes:
 - inferred favorites from purchase history
 - explicit saved favorites added by the member
+
+Supports: `limit`, `window_days`, `store_id`.
+
+Favorites now include richer menu metadata to support reorder flows:
+- `available_sizes`
+- `default_size`
+- `current_price`
+- `image_url`
+
+When `store_id` is provided, favorites also include store-aware fields:
+- `available_at_store`
+- `store_availability_status`
 
 ### `POST /api/member/favorites`
 Saves an explicit favorite menu item for the authenticated member.  
@@ -153,11 +192,13 @@ Use case: order confirmation and “view recent order” screens without member-
 Returns the authenticated member profile, points, recents, and favorites in one call.  
 Use case: profile page hydration without member-id routing.
 
+Supports: `include_items`, `recent_limit`, `favorites_limit`, `favorites_window_days`, `store_id`.
+
 ### `GET /api/member/dashboard`
 Returns member profile, points balance, and orders with store info and line items.  
 Use case: primary dashboard data fetch.
 
-Supports: `include_items`, `limit`, `offset`.
+Supports: `include_items`, `limit`, `offset`, `store_id`.
 
 Dashboard response also includes:
 - `pagination` (limit/offset/total)
@@ -209,7 +250,7 @@ Supports: `include_items`, `limit`.
 Returns a member’s most‑ordered menu items.  
 Use case: “Your favorites” section.
 
-Supports: `limit`, `window_days`.
+Supports: `limit`, `window_days`, `store_id`.
 
 ### `GET /members/{member_id}/favorites/trends`
 Returns weekly trends for a member’s top items in a recent window.  
@@ -221,7 +262,7 @@ Supports: `window_days`, `limit_items`.
 Returns a combined payload: profile, points, recent orders, and favorites.  
 Use case: one request to hydrate the member dashboard.
 
-Supports: `include_items`, `recent_limit`, `favorites_limit`, `favorites_window_days`.
+Supports: `include_items`, `recent_limit`, `favorites_limit`, `favorites_window_days`, `store_id`.
 
 ### `GET /locations/{location_id}/orders`
 Returns orders placed at a specific store.  
@@ -311,7 +352,10 @@ Health checks for uptime and BigQuery connectivity.
 - Cookie-based member sessions
 - Pickup ordering with pay-in-store checkout
 - Store availability enforcement from `open_for_business`
+- Nearby-store lookup with distance sorting
+- Backend-provided `display_name` store labels for ordering UIs
 - Explicit favorites write support
+- Favorites enriched for reorder flows
 - Pickup-time validation against store-local hours
 - Swagger docs at `/docs`
 - Filtering, pagination, sorting, fuzzy search

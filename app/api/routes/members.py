@@ -2,7 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.dependencies import get_current_member, get_member_service, get_order_service
+from app.api.dependencies import (
+    get_current_member,
+    get_location_service,
+    get_member_service,
+    get_order_service,
+)
 from app.core.errors import UnauthorizedError
 from app.schemas.common import ErrorResponse
 from app.schemas.member import (
@@ -14,6 +19,7 @@ from app.schemas.member import (
 )
 from app.schemas.order import Order, OrderQueryParams
 from app.services.members import MemberService
+from app.services.locations import LocationService
 from app.services.orders import OrderService
 
 
@@ -122,14 +128,24 @@ def get_member_favorites(
     member_id: str,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    store_id: Annotated[str | None, Query(min_length=1)] = None,
     current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
 ) -> list[MemberFavoriteItem]:
     if current_member.member_id != member_id:
         raise UnauthorizedError("Access denied.")
     member_service.get_member(member_id)
-    return order_service.list_member_favorites(member_id, limit, window_days=window_days)
+    store_available = None
+    if store_id:
+        store_available = location_service.get_location(store_id).ordering_available
+    return order_service.list_member_favorites(
+        member_id,
+        limit,
+        window_days=window_days,
+        store_available=store_available,
+    )
 
 
 @router.get(
@@ -168,9 +184,11 @@ def get_member_summary(
     recent_limit: Annotated[int, Query(ge=1, le=25)] = 5,
     favorites_limit: Annotated[int, Query(ge=1, le=50)] = 10,
     favorites_window_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    store_id: Annotated[str | None, Query(min_length=1)] = None,
     current_member: Member = Depends(get_current_member),
     member_service: MemberService = Depends(get_member_service),
     order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
 ) -> MemberSummary:
     if current_member.member_id != member_id:
         raise UnauthorizedError("Access denied.")
@@ -184,10 +202,14 @@ def get_member_summary(
         sort_dir="desc",
     )
     recent_orders = order_service.list_member_orders(member_id, recent_params)
+    store_available = None
+    if store_id:
+        store_available = location_service.get_location(store_id).ordering_available
     favorites = order_service.list_member_favorites(
         member_id,
         favorites_limit,
         window_days=favorites_window_days,
+        store_available=store_available,
     )
     return MemberSummary(
         member=member,

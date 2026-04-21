@@ -50,8 +50,12 @@ class MemberFavoriteItem(BaseModel):
     item_name: str | None = None
     category: str | None = None
     size: str | None = None
+    available_sizes: list[str] = Field(default_factory=list)
+    default_size: str | None = None
     current_price: float | None = None
     image_url: str | None = None
+    available_at_store: bool | None = None
+    store_availability_status: str | None = None
     is_explicit: bool = False
     total_orders: int
     total_quantity: int

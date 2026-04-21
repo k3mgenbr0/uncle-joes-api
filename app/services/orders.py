@@ -180,9 +180,11 @@ class OrderService:
         detail.location = LocationSummary(
             location_id=store.location_id,
             store_name=store.store_name,
+            display_name=store.display_name,
             city=store.city,
             state=store.state,
             full_address=store.full_address,
+            address=store.address,
             phone=store.phone,
         )
         return detail
@@ -212,9 +214,11 @@ class OrderService:
         detail.location = LocationSummary(
             location_id=detail.store_id or "",
             store_name=detail.store_name,
+            display_name=self._display_name_from_row(row),
             city=detail.store_city,
             state=detail.store_state,
             full_address=self._build_full_address(row),
+            address=self._build_full_address(row),
             phone=detail.store_phone,
         )
         return detail
@@ -233,6 +237,8 @@ class OrderService:
         member_id: str,
         limit: int,
         window_days: int | None = None,
+        *,
+        store_available: bool | None = None,
     ) -> list[MemberFavoriteItem]:
         inferred_rows = self._repository.list_member_favorites(
             member_id,
@@ -255,6 +261,14 @@ class OrderService:
             else:
                 merged[row["menu_item_id"]] = row
         rows = list(merged.values())[:limit]
+        for row in rows:
+            row["available_sizes"] = [row["size"]] if row.get("size") else []
+            row["default_size"] = row.get("size")
+            if store_available is not None:
+                row["available_at_store"] = store_available
+                row["store_availability_status"] = (
+                    "available" if store_available else "unavailable"
+                )
         return [MemberFavoriteItem.model_validate(row) for row in rows]
 
     def list_member_favorite_trends(
@@ -302,6 +316,8 @@ class OrderService:
             item_name=menu_item.name,
             category=menu_item.category,
             size=menu_item.size,
+            available_sizes=[menu_item.size] if menu_item.size else [],
+            default_size=menu_item.size,
             current_price=menu_item.price,
             image_url=menu_item.image_url,
             is_explicit=True,
@@ -340,6 +356,17 @@ class OrderService:
         ]
         cleaned = [part for part in parts if part]
         return ", ".join(cleaned) if cleaned else None
+
+    @staticmethod
+    def _display_name_from_row(row: dict) -> str | None:
+        city = row.get("store_city")
+        if not city:
+            return None
+        address_one = row.get("store_address_one")
+        if not address_one:
+            return city
+        street = str(address_one).lstrip("0123456789 ").strip()
+        return f"{city} - {street}" if street else city
 
     def _load_order_items(self, order_ids: list[str]) -> dict[str, list[OrderItem]]:
         items_by_order: dict[str, list[OrderItem]] = {order_id: [] for order_id in order_ids if order_id}

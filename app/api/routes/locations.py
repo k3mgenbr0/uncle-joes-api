@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_location_service, get_menu_service, get_order_service
 from app.schemas.common import ErrorResponse
-from app.schemas.location import Location, LocationQueryParams
+from app.schemas.location import Location, LocationQueryParams, NearbyLocationQueryParams
 from app.schemas.menu import MenuItem, MenuQueryParams
 from app.schemas.order import Order, OrderQueryParams
 from app.schemas.stats import LocationDailyStats, LocationOrderStats, LocationWeeklyStats
@@ -46,6 +46,30 @@ def list_locations(
         offset=offset,
     )
     return service.list_locations(params)
+
+
+@router.get(
+    "/nearby",
+    response_model=list[Location],
+    responses={500: {"model": ErrorResponse}},
+    summary="List nearby locations sorted by distance",
+)
+def list_nearby_locations(
+    lat: Annotated[float, Query(ge=-90, le=90)],
+    lng: Annotated[float, Query(ge=-180, le=180)],
+    orderable_only: Annotated[bool, Query()] = False,
+    open_for_business: Annotated[bool | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+    service: LocationService = Depends(get_location_service),
+) -> list[Location]:
+    params = NearbyLocationQueryParams(
+        lat=lat,
+        lng=lng,
+        orderable_only=orderable_only,
+        open_for_business=open_for_business,
+        limit=limit,
+    )
+    return service.list_nearby_locations(params)
 
 
 @router.get(
