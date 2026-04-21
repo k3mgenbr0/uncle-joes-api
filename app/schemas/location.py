@@ -92,3 +92,21 @@ class NearbyLocationQueryParams(BaseModel):
     orderable_only: bool = False
     open_for_business: bool | None = None
     limit: int = Field(default=10, ge=1, le=100)
+
+
+class PickupWindow(BaseModel):
+    start: str
+    end: str
+
+
+class LocationAvailability(BaseModel):
+    location_id: str
+    display_name: str | None = None
+    ordering_available: bool
+    open_now: bool | None = None
+    accepting_orders_now: bool
+    availability_status: str
+    availability_message: str | None = None
+    next_open_at: str | None = None
+    next_close_at: str | None = None
+    valid_pickup_windows: list[PickupWindow] = Field(default_factory=list)

@@ -7,10 +7,12 @@ from zoneinfo import ZoneInfo
 from app.core.errors import BadRequestError, NotFoundError
 from app.repositories.locations import LocationRepository
 from app.schemas.location import (
+    LocationAvailability,
     Location,
     LocationHoursDay,
     LocationQueryParams,
     NearbyLocationQueryParams,
+    PickupWindow,
 )
 
 
@@ -113,6 +115,48 @@ class LocationService:
                 f"Pickup time must be between {open_at.strftime('%-I:%M %p')} and {close_at.strftime('%-I:%M %p')} for this store."
             )
         return pickup_local
+
+    def get_location_availability(self, location_id: str) -> LocationAvailability:
+        location = self.get_location(location_id)
+        now = datetime.now(STORE_TIMEZONE)
+        current_day_name = now.strftime("%A")
+        current_hours = getattr(location.hours, current_day_name.lower(), None)
+        windows: list[PickupWindow] = []
+        if current_hours and current_hours.open and current_hours.close:
+            open_time = self._parse_time(current_hours.open)
+            close_time = self._parse_time(current_hours.close)
+            if open_time and close_time:
+                start = now.replace(
+                    hour=open_time.hour,
+                    minute=open_time.minute,
+                    second=0,
+                    microsecond=0,
+                )
+                end = now.replace(
+                    hour=close_time.hour,
+                    minute=close_time.minute,
+                    second=0,
+                    microsecond=0,
+                )
+                windows.append(
+                    PickupWindow(
+                        start=start.isoformat(),
+                        end=end.isoformat(),
+                    )
+                )
+        next_open_at, next_close_at = self._next_open_close(location, now)
+        return LocationAvailability(
+            location_id=location.location_id,
+            display_name=location.display_name,
+            ordering_available=location.ordering_available,
+            open_now=location.open_now,
+            accepting_orders_now=bool(location.ordering_available and location.open_now),
+            availability_status=location.availability_status,
+            availability_message=location.availability_message,
+            next_open_at=next_open_at.isoformat() if next_open_at else None,
+            next_close_at=next_close_at.isoformat() if next_close_at else None,
+            valid_pickup_windows=windows,
+        )
 
     def _enrich(self, location: Location) -> Location:
         location.full_address = self._build_full_address(location)
@@ -296,3 +340,36 @@ class LocationService:
         )
         arc = 2 * math.atan2(math.sqrt(haversine), math.sqrt(1 - haversine))
         return radius_miles * arc
+
+    def _next_open_close(
+        self,
+        location: Location,
+        reference: datetime,
+    ) -> tuple[datetime | None, datetime | None]:
+        for day_offset in range(0, 8):
+            candidate = reference + timedelta(days=day_offset)
+            weekday = candidate.strftime("%A").lower()
+            hours = getattr(location.hours, weekday, None)
+            if not hours:
+                continue
+            open_time = self._parse_time(hours.open)
+            close_time = self._parse_time(hours.close)
+            if not open_time or not close_time:
+                continue
+            open_at = candidate.replace(
+                hour=open_time.hour,
+                minute=open_time.minute,
+                second=0,
+                microsecond=0,
+            )
+            close_at = candidate.replace(
+                hour=close_time.hour,
+                minute=close_time.minute,
+                second=0,
+                microsecond=0,
+            )
+            if close_at <= open_at:
+                close_at += timedelta(days=1)
+            if day_offset > 0 or reference <= close_at:
+                return open_at, close_at
+        return None, None

@@ -26,7 +26,15 @@ from app.schemas.member import (
     MemberPointsHistoryEntry,
     MemberSummary,
 )
-from app.schemas.order import CreateOrderRequest, Order, OrderDetail, OrderQueryParams
+from app.schemas.order import (
+    CreateOrderItemRequest,
+    CreateOrderRequest,
+    Order,
+    OrderDetail,
+    OrderPreview,
+    OrderQueryParams,
+    ReorderRequest,
+)
 from app.schemas.rewards import MemberRewardsRedemptionList, MemberRewardsSummary
 from app.services.auth import AuthService
 from app.services.locations import LocationService
@@ -101,6 +109,44 @@ ORDER_DETAIL_EXAMPLE = {
         "status": "pending",
     },
 }
+
+ORDER_PREVIEW_EXAMPLE = {
+    **ORDER_DETAIL_EXAMPLE,
+    "order_id": "preview-123",
+    "source_order_id": None,
+    "warnings": [],
+}
+
+
+def _validate_store_order_items(
+    *,
+    store,
+    items,
+    menu_service: MenuService,
+    order_service: OrderService,
+) -> list[dict]:
+    if not store.ordering_available:
+        raise BadRequestError("This store is not yet open for ordering. Coming Soon!")
+    validated_items: list[dict] = []
+    for item in items:
+        menu_item = menu_service.get_menu_item_for_store(
+            item.menu_item_id,
+            store_available=store.ordering_available,
+        )
+        if menu_item.available_at_store is not True:
+            raise BadRequestError("Selected menu item is not available at this store.")
+        if menu_item.size and menu_item.size.lower() != item.size.strip().lower():
+            raise BadRequestError(
+                f"Size '{item.size}' is not available for menu item '{item.menu_item_id}'."
+            )
+        validated_items.append(
+            order_service.validate_order_item(
+                menu_item,
+                requested_size=item.size.strip(),
+                quantity=item.quantity,
+            )
+        )
+    return validated_items
 
 REWARDS_SUMMARY_EXAMPLE = {
     "member_id": "member-1",
@@ -346,6 +392,56 @@ def member_orders(
 
 
 @router.post(
+    "/orders/preview",
+    response_model=OrderPreview,
+    responses={
+        200: {"content": {"application/json": {"example": ORDER_PREVIEW_EXAMPLE}}},
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+    summary="Preview a pickup order for the authenticated member",
+)
+def preview_member_order(
+    body: CreateOrderRequest = Body(
+        ...,
+        examples={
+            "pickup_order_preview": {
+                "summary": "Preview a pickup order paid in store",
+                "value": CREATE_ORDER_EXAMPLE,
+            }
+        },
+    ),
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
+    menu_service: MenuService = Depends(get_menu_service),
+    settings: Settings = Depends(get_settings),
+) -> OrderPreview:
+    store = location_service.get_location(body.store_id)
+    normalized_pickup_time = None
+    if body.pickup_time is not None:
+        normalized_pickup_time = location_service.validate_pickup_time(store, body.pickup_time)
+    validated_items = _validate_store_order_items(
+        store=store,
+        items=body.items,
+        menu_service=menu_service,
+        order_service=order_service,
+    )
+    return order_service.preview_member_order(
+        member_id=current_member.member_id,
+        store=store,
+        items=validated_items,
+        payment_method=body.payment_method,
+        tax_rate=settings.order_tax_rate,
+        pickup_time=normalized_pickup_time,
+        special_instructions=body.special_instructions,
+        estimated_prep_minutes=settings.order_default_prep_minutes,
+    )
+
+
+@router.post(
     "/orders",
     response_model=OrderDetail,
     status_code=201,
@@ -383,31 +479,15 @@ def create_member_order(
         [item.menu_item_id for item in body.items],
         body.pickup_time.isoformat() if body.pickup_time else None,
     )
-    if not store.ordering_available:
-        raise BadRequestError("This store is not yet open for ordering. Coming Soon!")
     normalized_pickup_time = None
     if body.pickup_time is not None:
         normalized_pickup_time = location_service.validate_pickup_time(store, body.pickup_time)
-
-    validated_items: list[dict] = []
-    for item in body.items:
-        menu_item = menu_service.get_menu_item_for_store(
-            item.menu_item_id,
-            store_available=store.ordering_available,
-        )
-        if menu_item.available_at_store is not True:
-            raise BadRequestError("Selected menu item is not available at this store.")
-        if menu_item.size and menu_item.size.lower() != item.size.strip().lower():
-            raise BadRequestError(
-                f"Size '{item.size}' is not available for menu item '{item.menu_item_id}'."
-            )
-        validated_items.append(
-            order_service.validate_order_item(
-                menu_item,
-                requested_size=item.size.strip(),
-                quantity=item.quantity,
-            )
-        )
+    validated_items = _validate_store_order_items(
+        store=store,
+        items=body.items,
+        menu_service=menu_service,
+        order_service=order_service,
+    )
 
     return order_service.create_member_order(
         member_id=current_member.member_id,
@@ -418,6 +498,78 @@ def create_member_order(
         pickup_time=normalized_pickup_time,
         special_instructions=body.special_instructions,
         estimated_prep_minutes=settings.order_default_prep_minutes,
+    )
+
+
+@router.post(
+    "/orders/{order_id}/reorder",
+    response_model=OrderPreview,
+    responses={
+        200: {"content": {"application/json": {"example": ORDER_PREVIEW_EXAMPLE}}},
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+    summary="Preview a reorder from a previous member order",
+)
+def reorder_member_order(
+    order_id: str,
+    body: ReorderRequest = Body(
+        default=ReorderRequest(),
+        examples={
+            "reorder": {
+                "summary": "Preview a reorder from history",
+                "value": {
+                    "payment_method": "pay_in_store",
+                    "special_instructions": "No whip, please.",
+                },
+            }
+        },
+    ),
+    current_member: Member = Depends(get_current_member),
+    order_service: OrderService = Depends(get_order_service),
+    location_service: LocationService = Depends(get_location_service),
+    menu_service: MenuService = Depends(get_menu_service),
+    settings: Settings = Depends(get_settings),
+) -> OrderPreview:
+    source_order = order_service.get_order_detail(order_id)
+    if source_order.member_id != current_member.member_id:
+        raise UnauthorizedError("Access denied.")
+    store_id = body.store_id or source_order.store_id
+    if not store_id:
+        raise BadRequestError("A reorder store could not be determined.")
+    if not source_order.items:
+        raise BadRequestError("This order has no items available to reorder.")
+    store = location_service.get_location(store_id)
+    normalized_pickup_time = None
+    if body.pickup_time is not None:
+        normalized_pickup_time = location_service.validate_pickup_time(store, body.pickup_time)
+    reorder_items = [
+        CreateOrderItemRequest(
+            menu_item_id=item.menu_item_id,
+            quantity=item.quantity,
+            size=item.size,
+        )
+        for item in source_order.items
+        if item.menu_item_id and item.quantity and item.size
+    ]
+    validated_items = _validate_store_order_items(
+        store=store,
+        items=reorder_items,
+        menu_service=menu_service,
+        order_service=order_service,
+    )
+    return order_service.preview_member_order(
+        member_id=current_member.member_id,
+        store=store,
+        items=validated_items,
+        payment_method=body.payment_method,
+        tax_rate=settings.order_tax_rate,
+        pickup_time=normalized_pickup_time,
+        special_instructions=body.special_instructions,
+        estimated_prep_minutes=settings.order_default_prep_minutes,
+        source_order_id=order_id,
     )
 
 

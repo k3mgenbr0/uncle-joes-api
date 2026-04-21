@@ -8,7 +8,15 @@ from app.repositories.orders import OrderRepository
 from app.schemas.member import MemberFavoriteItem, MemberFavoriteTrendPoint, MemberPointsHistoryEntry
 from app.schemas.location import Location
 from app.schemas.menu import MenuItem
-from app.schemas.order import DashboardOrder, Order, OrderDetail, OrderItem, OrderQueryParams, PaymentSummary
+from app.schemas.order import (
+    DashboardOrder,
+    Order,
+    OrderDetail,
+    OrderItem,
+    OrderPreview,
+    OrderQueryParams,
+    PaymentSummary,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -188,6 +196,97 @@ class OrderService:
             phone=store.phone,
         )
         return detail
+
+    def preview_member_order(
+        self,
+        *,
+        member_id: str,
+        store: Location,
+        items: list[dict],
+        payment_method: str,
+        tax_rate: float,
+        pickup_time,
+        special_instructions: str | None,
+        estimated_prep_minutes: int,
+        source_order_id: str | None = None,
+    ) -> OrderPreview:
+        submitted_at = datetime.now(timezone.utc)
+        subtotal = round(sum(item["quantity"] * item["unit_price"] for item in items), 2)
+        discount = 0.0
+        tax = round((subtotal - discount) * tax_rate, 2)
+        total = round(subtotal - discount + tax, 2)
+        ready_by_estimate = pickup_time or (submitted_at + timedelta(minutes=estimated_prep_minutes))
+        order_id = f"preview-{uuid4()}"
+        preview_items = [
+            {
+                "order_item_id": f"preview-item-{index}",
+                "order_id": order_id,
+                "menu_item_id": item["menu_item_id"],
+                "item_name": item["item_name"],
+                "size": item["size"],
+                "quantity": item["quantity"],
+                "price": item["unit_price"],
+                "unit_price": item["unit_price"],
+                "line_total": round(item["quantity"] * item["unit_price"], 2),
+            }
+            for index, item in enumerate(items, start=1)
+        ]
+        return OrderPreview(
+            order_id=order_id,
+            member_id=member_id,
+            store_id=store.location_id,
+            store_name=store.store_name,
+            store_city=store.city,
+            store_state=store.state,
+            store_phone=store.phone,
+            location=LocationSummary(
+                location_id=store.location_id,
+                store_name=store.store_name,
+                display_name=store.display_name,
+                city=store.city,
+                state=store.state,
+                full_address=store.full_address,
+                address=store.address,
+                phone=store.phone,
+            ),
+            order_date=submitted_at,
+            pickup_time=pickup_time,
+            ready_by_estimate=ready_by_estimate,
+            submitted_at=submitted_at,
+            order_status="order_received",
+            estimated_prep_minutes=estimated_prep_minutes,
+            special_instructions=special_instructions,
+            subtotal=subtotal,
+            discount=discount,
+            tax=tax,
+            total=total,
+            points_earned=int(total // 1),
+            points_redeemed=0,
+            items=preview_items,
+            payment_summary=PaymentSummary(
+                subtotal=subtotal,
+                discount=discount,
+                tax=tax,
+                total=total,
+                method=payment_method,
+                status="pending",
+            ),
+            source_order_id=source_order_id,
+            warnings=[],
+        )
+
+    def build_reorder_items(self, source_order: OrderDetail) -> list[dict]:
+        return [
+            {
+                "menu_item_id": item.menu_item_id,
+                "item_name": item.item_name,
+                "size": item.size,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price or item.price,
+            }
+            for item in source_order.items
+            if item.menu_item_id and item.item_name and item.size and item.quantity and (item.unit_price is not None or item.price is not None)
+        ]
 
     def get_order_detail(self, order_id: str) -> OrderDetail:
         row = self._repository.get_order_detail(order_id)

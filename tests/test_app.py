@@ -180,6 +180,25 @@ class StubLocationService:
     def validate_pickup_time(self, location: Location, pickup_time, *, buffer_minutes: int = 10) -> None:
         return None
 
+    def get_location_availability(self, location_id: str):
+        return {
+            "location_id": location_id,
+            "display_name": "Indianapolis - Main St",
+            "ordering_available": True,
+            "open_now": True,
+            "accepting_orders_now": True,
+            "availability_status": "open",
+            "availability_message": None,
+            "next_open_at": None,
+            "next_close_at": "2026-04-21T20:00:00-04:00",
+            "valid_pickup_windows": [
+                {
+                    "start": "2026-04-21T05:30:00-04:00",
+                    "end": "2026-04-21T20:00:00-04:00",
+                }
+            ],
+        }
+
 
 class StubMenuService:
     def list_menu_items(self, params: MenuQueryParams) -> list[MenuItem]:
@@ -546,7 +565,19 @@ class StubOrderService:
             order_status="ready_for_pickup",
             estimated_prep_minutes=15,
             special_instructions=None,
-            items=[],
+            items=[
+                {
+                    "order_item_id": "item-1",
+                    "order_id": order_id,
+                    "menu_item_id": "latte",
+                    "item_name": "Latte",
+                    "size": "Medium",
+                    "quantity": 1,
+                    "price": 4.5,
+                    "unit_price": 4.5,
+                    "line_total": 4.5,
+                }
+            ],
             payment_summary={"subtotal": 10.0, "discount": 0.0, "tax": 0.8, "total": 10.8, "method": "pay_in_store", "status": "pending"},
         )
 
@@ -611,6 +642,70 @@ class StubOrderService:
             },
         )
         return self.created_order
+
+    def preview_member_order(
+        self,
+        *,
+        member_id: str,
+        store,
+        items: list[dict],
+        payment_method: str,
+        tax_rate: float,
+        pickup_time=None,
+        special_instructions: str | None = None,
+        estimated_prep_minutes: int = 15,
+        source_order_id: str | None = None,
+    ):
+        subtotal = round(sum(item["quantity"] * item["unit_price"] for item in items), 2)
+        tax = round(subtotal * tax_rate, 2)
+        total = round(subtotal + tax, 2)
+        return {
+            "order_id": "preview-order",
+            "member_id": member_id,
+            "store_id": store.location_id,
+            "store_name": store.store_name,
+            "store_city": store.city,
+            "store_state": store.state,
+            "store_phone": store.phone,
+            "location": {"location_id": store.location_id, "store_name": store.store_name},
+            "order_date": "2026-04-17T12:00:00Z",
+            "pickup_time": pickup_time,
+            "ready_by_estimate": pickup_time or "2026-04-17T12:15:00Z",
+            "submitted_at": "2026-04-17T12:00:00Z",
+            "order_status": "order_received",
+            "estimated_prep_minutes": estimated_prep_minutes,
+            "special_instructions": special_instructions,
+            "subtotal": subtotal,
+            "discount": 0.0,
+            "tax": tax,
+            "total": total,
+            "points_earned": int(total // 1),
+            "points_redeemed": 0,
+            "items": [
+                {
+                    "order_item_id": f"preview-item-{index}",
+                    "order_id": "preview-order",
+                    "menu_item_id": item["menu_item_id"],
+                    "item_name": item["item_name"],
+                    "size": item["size"],
+                    "quantity": item["quantity"],
+                    "price": item["unit_price"],
+                    "unit_price": item["unit_price"],
+                    "line_total": round(item["quantity"] * item["unit_price"], 2),
+                }
+                for index, item in enumerate(items, start=1)
+            ],
+            "payment_summary": {
+                "subtotal": subtotal,
+                "discount": 0.0,
+                "tax": tax,
+                "total": total,
+                "method": payment_method,
+                "status": "pending",
+            },
+            "source_order_id": source_order_id,
+            "warnings": [],
+        }
 
     def list_member_favorites(
         self,
@@ -868,6 +963,16 @@ def test_list_nearby_locations_returns_distance_and_display_fields() -> None:
     assert payload[0]["distance_miles"] == 1.25
     assert payload[0]["region"] == "IN"
     assert payload[0]["metro_area"] == "Indianapolis"
+
+
+def test_location_availability_endpoint() -> None:
+    client = build_test_client()
+    response = client.get("/locations/101/availability")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ordering_available"] is True
+    assert payload["accepting_orders_now"] is True
+    assert isinstance(payload["valid_pickup_windows"], list)
 
 
 def test_get_menu_item() -> None:
@@ -1138,6 +1243,44 @@ def test_create_member_order_endpoint() -> None:
     response = client.get("/api/member/orders/order-new")
     assert response.status_code == 200
     assert response.json()["order_id"] == "order-new"
+
+
+def test_preview_member_order_endpoint() -> None:
+    client = build_test_client()
+    response = client.post(
+        "/api/member/orders/preview",
+        json={
+            "store_id": "101",
+            "items": [
+                {
+                    "menu_item_id": "latte",
+                    "quantity": 1,
+                    "size": "Medium",
+                }
+            ],
+            "payment_method": "pay_in_store",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["order_id"] == "preview-order"
+    assert payload["payment_summary"]["method"] == "pay_in_store"
+    assert payload["source_order_id"] is None
+
+
+def test_reorder_member_order_endpoint() -> None:
+    client = build_test_client()
+    response = client.post(
+        "/api/member/orders/order-1/reorder",
+        json={
+            "payment_method": "pay_in_store",
+            "special_instructions": "No whip, please.",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source_order_id"] == "order-1"
+    assert payload["items"]
     assert response.json()["location"]["location_id"] == "101"
 
     response = client.get("/orders/order-new")

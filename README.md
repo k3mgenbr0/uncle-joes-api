@@ -48,6 +48,20 @@ Use case: store detail page.
 
 Includes address, coordinates, hours, `hours_today`, `open_now`, service flags, and derived store detail fields.
 
+### `GET /locations/{location_id}/availability`
+Returns a store-availability helper payload for ordering flows.  
+Use case: smarter pickup messaging, disabling invalid checkout states, and showing the next open/close window.
+
+Includes:
+- `ordering_available`
+- `open_now`
+- `accepting_orders_now`
+- `availability_status`
+- `availability_message`
+- `next_open_at`
+- `next_close_at`
+- `valid_pickup_windows`
+
 ### `GET /locations/nearby`
 Returns locations sorted by distance from a `lat`/`lng` point.  
 Use case: nearby-store suggestions, geolocation fallback pickup selection, and “closest open store” flows.
@@ -238,6 +252,27 @@ Pickup validation notes:
   - `This store is closed on Monday.`
   - `This store is not yet open for ordering. Coming Soon!`
 
+### `POST /api/member/orders/preview`
+Returns a non-persisted order preview using the same validation rules as real checkout.  
+Use case: cart review screens, pricing previews, pickup validation before submit, and “estimated points earned” UX.
+
+Preview payloads include:
+- pricing totals
+- `ready_by_estimate`
+- `points_earned`
+- validated line items
+- payment summary
+- optional `warnings`
+
+### `POST /api/member/orders/{order_id}/reorder`
+Builds a preview from a past order using the authenticated member’s history.  
+Use case: reorder buttons from favorites or order history without recreating the cart client-side.
+
+Behavior notes:
+- uses the same store/item validation rules as current ordering
+- can accept optional overrides like `store_id`, `pickup_time`, and `special_instructions`
+- returns an order-preview payload with `source_order_id`
+
 ### `GET /api/member/orders/{order_id}`
 Returns one order for the authenticated member using the session-first member API.  
 Use case: order confirmation and “view recent order” screens without member-id routing.
@@ -418,7 +453,9 @@ Health checks for uptime and BigQuery connectivity.
 - CORS enabled for frontend use
 - Cookie-based member sessions
 - Pickup ordering with pay-in-store checkout
+- Order preview and reorder flows for faster checkout UX
 - Store availability enforcement from `open_for_business`
+- Store availability helper payloads for pickup UX
 - Nearby-store lookup with distance sorting
 - Backend-provided `display_name` store labels for ordering UIs
 - Explicit favorites write support

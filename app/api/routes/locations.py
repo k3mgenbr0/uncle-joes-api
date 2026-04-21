@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_location_service, get_menu_service, get_order_service
 from app.schemas.common import ErrorResponse
-from app.schemas.location import Location, LocationQueryParams, NearbyLocationQueryParams
+from app.schemas.location import (
+    Location,
+    LocationAvailability,
+    LocationQueryParams,
+    NearbyLocationQueryParams,
+)
 from app.schemas.menu import MenuItem, MenuQueryParams
 from app.schemas.order import Order, OrderQueryParams
 from app.schemas.stats import LocationDailyStats, LocationOrderStats, LocationWeeklyStats
@@ -83,6 +88,19 @@ def get_location(
     service: LocationService = Depends(get_location_service),
 ) -> Location:
     return service.get_location(location_id)
+
+
+@router.get(
+    "/{location_id}/availability",
+    response_model=LocationAvailability,
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get store availability details for ordering",
+)
+def get_location_availability(
+    location_id: str,
+    service: LocationService = Depends(get_location_service),
+) -> LocationAvailability:
+    return service.get_location_availability(location_id)
 
 
 @router.get(

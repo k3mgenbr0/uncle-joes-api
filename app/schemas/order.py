@@ -104,6 +104,13 @@ class CreateOrderRequest(BaseModel):
     special_instructions: str | None = Field(default=None, max_length=500)
 
 
+class ReorderRequest(BaseModel):
+    store_id: str | None = None
+    payment_method: Literal["pay_in_store"] = "pay_in_store"
+    pickup_time: datetime | None = None
+    special_instructions: str | None = Field(default=None, max_length=500)
+
+
 class OrderDetail(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -130,3 +137,8 @@ class OrderDetail(BaseModel):
     points_redeemed: int | None = None
     items: list[OrderItem] = Field(default_factory=list)
     payment_summary: PaymentSummary | None = None
+
+
+class OrderPreview(OrderDetail):
+    source_order_id: str | None = None
+    warnings: list[str] = Field(default_factory=list)
