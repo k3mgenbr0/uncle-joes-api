@@ -1,5 +1,5 @@
 # Uncle Joe's Coffee Shop API
-
+#
 ## Project Overview
 This backend powers the Uncle Joe’s Coffee Shop app. It connects to Google BigQuery and exposes an HTTP API that a frontend can call to show locations, menu items, member profiles, orders, search, and stats.
 
