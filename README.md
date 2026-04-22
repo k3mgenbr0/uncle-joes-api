@@ -4,6 +4,7 @@
 
 - [Colten Brandt: FrontEnd Developer](https://github.com/brandt10) 
 - [Kyle Emgenbroich: Backend Developer](https://github.com/k3mgenbr0) 
+- [Rachel Carlson: Project Manager](https://github.com/carls171)
 
 ## Project Overview
 This backend powers the Uncle Joe’s Coffee Shop app. It connects to Google BigQuery and exposes an HTTP API that a frontend can call to show locations, menu items, member profiles, orders, search, and stats.
