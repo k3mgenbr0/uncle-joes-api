@@ -2,7 +2,7 @@
 
 ## Contributors
 
-- [Colten Brandt](https://github.com/brandt10)
+- [Colten Brandt: FrontEnd Developer](https://github.com/brandt10) 
 - 
 
 ## Project Overview
