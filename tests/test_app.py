@@ -177,8 +177,9 @@ class StubLocationService:
             metro_area="Indianapolis",
         )
 
-    def validate_pickup_time(self, location: Location, pickup_time, *, buffer_minutes: int = 10) -> None:
-        return None
+    def validate_pickup_time(self, location: Location, pickup_time):
+        service = LocationService(repository=None)  # type: ignore[arg-type]
+        return service.validate_pickup_time(location, pickup_time)
 
     def get_location_availability(self, location_id: str):
         return {
@@ -1211,7 +1212,7 @@ def test_create_member_order_endpoint() -> None:
                 }
             ],
             "payment_method": "pay_in_store",
-            "pickup_time": "2026-04-18T09:30:00Z",
+            "pickup_time": "2026-05-02T13:30:00Z",
             "special_instructions": "Extra hot, please.",
         },
     )
@@ -1312,16 +1313,17 @@ def test_reorder_member_order_endpoint() -> None:
 def test_pickup_time_validation_uses_store_local_hours() -> None:
     service = LocationService(repository=None)  # type: ignore[arg-type]
     location = StubLocationService().get_location("101")
-    valid_pickup = datetime(2026, 4, 27, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    valid_pickup = datetime(2026, 5, 4, 11, 30, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     service.validate_pickup_time(location, valid_pickup)
 
-    cross_timezone_pickup = datetime(2026, 4, 27, 11, 50, tzinfo=ZoneInfo("America/Los_Angeles"))
+    cross_timezone_pickup = datetime.fromisoformat("2026-05-04T15:50:00Z")
     normalized = service.validate_pickup_time(location, cross_timezone_pickup)
     assert normalized.strftime("%A") == "Monday"
     assert normalized.hour == 11
     assert normalized.minute == 50
+    assert normalized.isoformat().endswith("-04:00")
 
-    invalid_pickup = datetime(2026, 4, 27, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
+    invalid_pickup = datetime(2026, 5, 4, 21, 0, tzinfo=ZoneInfo("America/Indiana/Indianapolis"))
     try:
         service.validate_pickup_time(location, invalid_pickup)
     except BadRequestError as exc:
@@ -1339,6 +1341,79 @@ def test_parse_time_supports_bigquery_hour_strings() -> None:
     assert parsed_close is not None
     assert parsed_close.hour == 20
     assert parsed_close.minute == 0
+
+
+def test_pickup_time_validation_assumes_naive_store_local_time() -> None:
+    service = LocationService(repository=None)  # type: ignore[arg-type]
+    location = StubLocationService().get_location("101")
+    naive_pickup = datetime(2026, 5, 6, 12, 0)
+
+    normalized = service.validate_pickup_time(location, naive_pickup)
+
+    assert normalized.hour == 12
+    assert normalized.minute == 0
+    assert normalized.tzinfo == ZoneInfo("America/Indiana/Indianapolis")
+
+
+def test_create_member_order_preserves_timezone_aware_pickup_time() -> None:
+    client = build_test_client()
+
+    response = client.post(
+        "/api/member/orders",
+        json={
+            "store_id": "101",
+            "items": [{"menu_item_id": "latte", "quantity": 1, "size": "Medium"}],
+            "payment_method": "pay_in_store",
+            "pickup_time": "2026-05-06T12:00:00-04:00",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["pickup_time"] == "2026-05-06T12:00:00-04:00"
+    assert payload["ready_by_estimate"] == "2026-05-06T12:00:00-04:00"
+    assert payload["submitted_at"].endswith("Z") or "+" in payload["submitted_at"]
+
+
+def test_order_detail_localizes_utc_pickup_time_for_response() -> None:
+    class DetailRepository:
+        def get_order_detail(self, order_id: str):
+            return {
+                "order_id": order_id,
+                "member_id": "member-1",
+                "store_id": "101",
+                "store_city": "Indianapolis",
+                "store_state": "IN",
+                "store_phone": "317-555-0101",
+                "store_address_one": "123 Main St",
+                "store_postal_code": "46204",
+                "order_date": "2026-04-29T16:00:00Z",
+                "pickup_time": "2026-04-29T16:00:00Z",
+                "ready_by_estimate": "2026-04-29T16:15:00Z",
+                "submitted_at": "2026-04-29T15:45:00Z",
+                "order_status": "order_received",
+                "estimated_prep_minutes": 15,
+                "items_subtotal": 10.0,
+                "order_discount": 0.0,
+                "order_subtotal": 10.0,
+                "sales_tax": 0.7,
+                "order_total": 10.7,
+                "payment_method": "pay_in_store",
+                "payment_status": "pending",
+            }
+
+        def list_order_items(self, order_ids):
+            return []
+
+    service = OrderService(DetailRepository())  # type: ignore[arg-type]
+    detail = service.get_order_detail("order-1")
+
+    assert detail.pickup_time is not None
+    assert detail.ready_by_estimate is not None
+    assert detail.submitted_at is not None
+    assert detail.pickup_time.isoformat() == "2026-04-29T12:00:00-04:00"
+    assert detail.ready_by_estimate.isoformat() == "2026-04-29T12:15:00-04:00"
+    assert detail.submitted_at.isoformat() == "2026-04-29T11:45:00-04:00"
 
 
 def test_order_service_include_items_falls_back_to_empty_arrays() -> None:

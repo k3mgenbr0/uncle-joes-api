@@ -232,18 +232,9 @@ class LocationService:
     def _normalize_pickup_time(pickup_time: datetime) -> datetime:
         if pickup_time.tzinfo is None:
             return pickup_time.replace(tzinfo=STORE_TIMEZONE)
-        # Treat the submitted ISO timestamp as a store-local wall-clock selection
-        # so the picked date/time stays aligned with the schedule shown in the UI.
-        return datetime(
-            pickup_time.year,
-            pickup_time.month,
-            pickup_time.day,
-            pickup_time.hour,
-            pickup_time.minute,
-            pickup_time.second,
-            pickup_time.microsecond,
-            tzinfo=STORE_TIMEZONE,
-        )
+        # Preserve the submitted instant semantics and convert that instant into
+        # the store's local timezone for hours validation.
+        return pickup_time.astimezone(STORE_TIMEZONE)
 
     @staticmethod
     def _services(location: Location) -> list[str]:

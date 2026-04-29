@@ -17,6 +17,7 @@ from app.schemas.order import (
     OrderQueryParams,
     PaymentSummary,
 )
+from app.services.locations import STORE_TIMEZONE
 
 
 logger = logging.getLogger(__name__)
@@ -231,7 +232,7 @@ class OrderService:
             }
             for index, item in enumerate(items, start=1)
         ]
-        return OrderPreview(
+        preview = OrderPreview(
             order_id=order_id,
             member_id=member_id,
             store_id=store.location_id,
@@ -274,6 +275,7 @@ class OrderService:
             source_order_id=source_order_id,
             warnings=[],
         )
+        return self._localize_order_datetimes(preview)
 
     def build_reorder_items(self, source_order: OrderDetail) -> list[dict]:
         return [
@@ -292,7 +294,7 @@ class OrderService:
         row = self._repository.get_order_detail(order_id)
         if row is None:
             raise NotFoundError(f"Order '{order_id}' was not found.")
-        detail = OrderDetail.model_validate(row)
+        detail = self._localize_order_datetimes(OrderDetail.model_validate(row))
         detail.items = self._load_order_items([order_id]).get(order_id, [])
         detail.points_earned = int(detail.total // 1) if detail.total is not None else 0
         detail.points_redeemed = 0
@@ -492,6 +494,7 @@ class OrderService:
 
     def _hydrate_orders(self, orders: list[Order]) -> None:
         for order in orders:
+            self._localize_order_datetimes(order)
             order.points_earned = int(order.order_total // 1) if order.order_total is not None else 0
             order.points_redeemed = 0
             if not order.store_name and order.store_city:
@@ -508,3 +511,18 @@ class OrderService:
         except Exception:
             logger.warning("Skipping malformed order item row=%s", item_row)
             return None
+
+    @staticmethod
+    def _localize_datetime(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(STORE_TIMEZONE)
+
+    def _localize_order_datetimes(self, order):
+        order.order_date = self._localize_datetime(order.order_date)
+        order.pickup_time = self._localize_datetime(order.pickup_time)
+        order.ready_by_estimate = self._localize_datetime(order.ready_by_estimate)
+        order.submitted_at = self._localize_datetime(order.submitted_at)
+        return order

@@ -251,9 +251,11 @@ Order fields now include:
 - nested location summary and store phone when available
 
 Pickup validation notes:
-- `pickup_time` should be sent as ISO 8601
+- `pickup_time` should be sent as a timezone-aware ISO 8601 string when scheduled
+  - example: `2026-04-29T12:00:00-04:00`
 - `pickup_time` is optional; if omitted, the backend accepts the order and computes a ready estimate automatically
 - validation uses the selected store’s local business hours
+- `pickup_time`, `ready_by_estimate`, and `submitted_at` are returned as timezone-aware ISO strings
 - the backend returns precise errors such as:
   - `Pickup time must be between 5:30 AM and 8:00 PM for this store.`
   - `This store is closed on Monday.`
